@@ -13,7 +13,7 @@ export class Item {
   description!: string;
 
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
-  price!: number;
+  price?: number;
 
   @Column({ default: false })
   purchased!: boolean;

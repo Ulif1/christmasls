@@ -205,18 +205,30 @@ const Home: React.FC = () => {
                   <li key={item.id} className="home__list-item">
                     {item.name} - {item.description}{!!item.price && ` - $${item.price}`}
                     <button onClick={async () => {
-                      const newName = prompt('New name:', item.name);
-                      if (newName) {
-                        const token = sessionStorage.getItem('token');
-                        await fetch(`/api/items/${item.id}`, {
-                          method: 'PUT',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            Authorization: `Bearer ${token}`,
-                          },
-                          body: JSON.stringify({ name: newName, description: item.description, price: item.price }),
-                        });
-                        fetchLists();
+                      const newName = prompt('New name:', item.name) || item.name;
+                      const newDesc = prompt('New description:', item.description || '') || item.description;
+                      const newPrice = prompt('New price:', item.price?.toString() || '') || item.price;
+                      const token = sessionStorage.getItem('token');
+                      const response = await fetch(`/api/items/${item.id}`, {
+                        method: 'PUT',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ name: newName, description: newDesc, price: parseFloat(newPrice) || undefined }),
+                      });
+                      if (response.ok) {
+                        const updatedItem = await response.json();
+                        setLists(lists.map(list => ({
+                          ...list,
+                          items: list.items.map(i => i.id === item.id ? updatedItem : i)
+                        })));
+                        if (selectedOwnedList) {
+                          setSelectedOwnedList({
+                            ...selectedOwnedList,
+                            items: selectedOwnedList.items.map(i => i.id === item.id ? updatedItem : i)
+                          });
+                        }
                       }
                     }} className="home__button">Edit</button>
                     <button onClick={async () => {
