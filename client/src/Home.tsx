@@ -226,7 +226,16 @@ const Home: React.FC = () => {
                           method: 'DELETE',
                           headers: { Authorization: `Bearer ${token}` },
                         });
-                        fetchLists();
+                        setLists(lists.map(list => ({
+                          ...list,
+                          items: list.items.filter(i => i.id !== item.id)
+                        })));
+                        if (selectedOwnedList) {
+                          setSelectedOwnedList({
+                            ...selectedOwnedList,
+                            items: selectedOwnedList.items.filter(i => i.id !== item.id)
+                          });
+                        }
                       }
                     }} className="home__button" style={{ background: 'linear-gradient(145deg, #dc3545, #c82333)' }}>Delete</button>
                   </li>

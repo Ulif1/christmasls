@@ -18,6 +18,6 @@ export class Item {
   @Column({ default: false })
   purchased!: boolean;
 
-  @ManyToOne(() => ChristmasList, list => list.items)
+  @ManyToOne(() => ChristmasList, list => list.items, { onDelete: 'CASCADE' })
   list!: ChristmasList;
 }

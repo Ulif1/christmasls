@@ -116,14 +116,17 @@ app.put('/api/lists/:id', authenticate, async (req: any, res) => {
 
 app.delete('/api/lists/:id', authenticate, async (req: any, res) => {
   const { id } = req.params;
+  console.log('Deleting list:', id, 'User:', req.user.id);
   try {
     const list = await AppDataSource.manager.findOne(ChristmasList, {
       where: { id: parseInt(id), user: { id: req.user.id } },
     });
+    console.log('List found:', list);
     if (!list) return res.status(404).json({ message: 'List not found' });
     await AppDataSource.manager.remove(list);
     res.json({ message: 'List deleted' });
   } catch (error) {
+    console.error('Error deleting list:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -222,33 +225,35 @@ app.put('/api/items/:id', authenticate, async (req: any, res) => {
   const { id } = req.params;
   const { name, description, price } = req.body;
   try {
-    const item = await AppDataSource.manager.findOne(Item, {
-      where: { id: parseInt(id) },
-      relations: ['list'],
-    });
-    if (!item || item.list.user.id !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
+    const item = await AppDataSource.manager.findOne(Item, { where: { id: parseInt(id) } });
+    if (!item) return res.status(404).json({ message: 'Item not found' });
+    const userLists = await AppDataSource.manager.find(ChristmasList, { where: { user: { id: req.user.id } } });
+    const isOwner = userLists.some(list => list.id === item.list?.id);
+    if (!isOwner) return res.status(403).json({ message: 'Not authorized' });
     item.name = name;
     item.description = description;
-    item.price = price;
+    item.price = parseFloat(price);
     await AppDataSource.manager.save(item);
     res.json(item);
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error editing item:', error);
+    res.status(500).json({ message: 'Error Editing Item' });
   }
 });
 
 app.delete('/api/items/:id', authenticate, async (req: any, res) => {
   const { id } = req.params;
   try {
-    const item = await AppDataSource.manager.findOne(Item, {
-      where: { id: parseInt(id) },
-      relations: ['list'],
-    });
-    if (!item || item.list.user.id !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
+    const item = await AppDataSource.manager.findOne(Item, { where: { id: parseInt(id) }, relations: ['list'] });
+    if (!item) return res.status(404).json({ message: 'Item not found' });
+    const userLists = await AppDataSource.manager.find(ChristmasList, { where: { user: { id: req.user.id } } });
+    const isOwner = userLists.some(list => list.id === item.list?.id);
+    if (!isOwner) return res.status(403).json({ message: 'Not authorized' });
     await AppDataSource.manager.remove(item);
     res.json({ message: 'Item deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error deleting item:', error);
+    res.status(500).json({ message: 'Error Deleting Item' });
   }
 });
 
