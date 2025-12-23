@@ -9,59 +9,58 @@ interface Item {
   price?: number;
 }
 
+interface User {
+  id: number;
+  username: string;
+}
+
 interface ChristmasList {
   id: number;
   name: string;
   items: Item[];
+  sharedWith?: User[];
+  user?: User;
 }
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
-  const [list, setList] = useState<ChristmasList | null>(null);
+  const [lists, setLists] = useState<ChristmasList[]>([]);
+  const [selectedOwnedList, setSelectedOwnedList] = useState<ChristmasList | null>(null);
+  const [activeSharedTab, setActiveSharedTab] = useState<number>(0);
   const [itemName, setItemName] = useState('');
   const [itemDesc, setItemDesc] = useState('');
   const [itemPrice, setItemPrice] = useState('');
+  const [shareUsername, setShareUsername] = useState('');
+  const [renameName, setRenameName] = useState('');
 
   useEffect(() => {
     fetchLists();
   }, []);
 
   const fetchLists = async () => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     const response = await fetch('/api/lists', {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (response.ok) {
-      const lists: ChristmasList[] = await response.json();
-      if (lists.length === 0) {
-        // Create default list
-        const createResponse = await fetch('/api/lists', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ name: 'My Christmas List' }),
-        });
-        if (createResponse.ok) {
-          const newList = await createResponse.json();
-          setList(newList);
-        }
-      } else {
-        setList(lists[0]);
+      const fetchedLists: ChristmasList[] = await response.json();
+      setLists(fetchedLists);
+      const owned = fetchedLists.filter(l => !l.user);
+      if (owned.length > 0 && !selectedOwnedList) {
+        setSelectedOwnedList(owned[0]);
       }
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     navigate('/');
   };
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!list) return;
-    const token = localStorage.getItem('token');
+    if (!selectedOwnedList) return;
+    const token = sessionStorage.getItem('token');
     const response = await fetch('/api/items', {
       method: 'POST',
       headers: {
@@ -72,56 +71,204 @@ const Home: React.FC = () => {
         name: itemName,
         description: itemDesc,
         price: parseFloat(itemPrice) || undefined,
-        listId: list.id,
+        listId: selectedOwnedList.id,
       }),
     });
     if (response.ok) {
+      const newItem = await response.json();
+      setLists(lists.map(list =>
+        list.id === selectedOwnedList.id
+          ? { ...list, items: [...list.items, newItem] }
+          : list
+      ));
+      setSelectedOwnedList({ ...selectedOwnedList, items: [...selectedOwnedList.items, newItem] });
       setItemName('');
       setItemDesc('');
       setItemPrice('');
-      fetchLists(); // Refresh
     }
   };
+
+  const handleShare = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOwnedList) return;
+    const token = sessionStorage.getItem('token');
+    const response = await fetch(`/api/lists/${selectedOwnedList.id}/share`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ username: shareUsername }),
+    });
+    if (response.ok) {
+      setShareUsername('');
+      fetchLists(); // Refresh to update sharedWith
+      alert('List shared');
+    } else {
+      alert('Failed to share');
+    }
+  };
+
+  const ownedLists = lists.filter(list => !list.user);
+  const sharedLists = lists.filter(list => list.user);
 
   return (
     <div className="home">
       <h1 className="home__title">🎅 Welcome Home! 🎅</h1>
-      <p>Your Christmas List</p>
-      {list && (
+      <div className="home__columns">
         <div>
-          <h2>{list.name}</h2>
-          <ul>
-            {list.items?.map(item => (
-              <li key={item.id}>
-                {item.name} - {item.description} - ${item.price}
-              </li>
-            ))}
-          </ul>
-          <form onSubmit={handleAddItem}>
-            <input
-              type="text"
-              placeholder="Item name"
-              value={itemName}
-              onChange={(e) => setItemName(e.target.value)}
-              required
-            />
-            <input
-              type="text"
-              placeholder="Description"
-              value={itemDesc}
-              onChange={(e) => setItemDesc(e.target.value)}
-            />
-            <input
-              type="number"
-              placeholder="Price"
-              value={itemPrice}
-              onChange={(e) => setItemPrice(e.target.value)}
-              step="0.01"
-            />
-            <button type="submit">Add Item</button>
-          </form>
+          <h2>My Lists</h2>
+          {ownedLists.map(list => (
+            <button key={list.id} onClick={() => setSelectedOwnedList(list)} className={`home__tab-button ${selectedOwnedList?.id === list.id ? 'home__tab-button--active' : ''}`}>
+              {list.name}
+            </button>
+          ))}
+          <button onClick={async () => {
+            const token = sessionStorage.getItem('token');
+            const response = await fetch('/api/lists', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ name: 'New List' }),
+            });
+            if (response.ok) {
+              fetchLists();
+            }
+          }} className="home__create-button">🎄 Create New List 🎄</button>
+          {selectedOwnedList && (
+            <div>
+              <h3>{selectedOwnedList.name}</h3>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const token = sessionStorage.getItem('token');
+                const response = await fetch(`/api/lists/${selectedOwnedList.id}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({ name: renameName }),
+                });
+                if (response.ok) {
+                  setLists(lists.map(list => list.id === selectedOwnedList.id ? { ...list, name: renameName } : list));
+                  setSelectedOwnedList({ ...selectedOwnedList, name: renameName });
+                  setRenameName('');
+                }
+              }} className="home__form">
+                <input
+                  type="text"
+                  placeholder="New name"
+                  value={renameName}
+                  onChange={(e) => setRenameName(e.target.value)}
+                  required
+                />
+                <button type="submit" className="home__button">Rename List</button>
+              </form>
+              <button onClick={async () => {
+                if (window.confirm('Delete this list?')) {
+                  const token = sessionStorage.getItem('token');
+                  const response = await fetch(`/api/lists/${selectedOwnedList.id}`, {
+                    method: 'DELETE',
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  if (response.ok) {
+                    fetchLists();
+                    setSelectedOwnedList(null);
+                  }
+                }
+              }} className="home__button" style={{ background: 'linear-gradient(145deg, #dc3545, #c82333)' }}>Delete List</button>
+              <ul>
+                {selectedOwnedList.items?.map(item => (
+                  <li key={item.id} className="home__list-item">
+                    {item.name} - {item.description}{!!item.price && ` - $${item.price}`}
+                  </li>
+                ))}
+              </ul>
+              <form onSubmit={handleAddItem} className="home__form">
+                <input
+                  type="text"
+                  placeholder="Item name"
+                  value={itemName}
+                  onChange={(e) => setItemName(e.target.value)}
+                  required
+                />
+                <input
+                  type="text"
+                  placeholder="Description"
+                  value={itemDesc}
+                  onChange={(e) => setItemDesc(e.target.value)}
+                />
+                <input
+                  type="number"
+                  placeholder="Price"
+                  value={itemPrice}
+                  onChange={(e) => setItemPrice(e.target.value)}
+                  step="0.01"
+                />
+                <button type="submit" className="home__button">Add Item</button>
+              </form>
+              <form onSubmit={handleShare} className="home__form">
+                <input
+                  type="text"
+                  placeholder="Share with username"
+                  value={shareUsername}
+                  onChange={(e) => setShareUsername(e.target.value)}
+                  required
+                />
+                <button type="submit" className="home__button">Share</button>
+              </form>
+              <div>
+                <h4>Shared with:</h4>
+                {selectedOwnedList.sharedWith?.map(user => (
+                  <div key={user.id} className="home__shared-user">
+                    {user.username}
+                    <button onClick={async () => {
+                      const token = sessionStorage.getItem('token');
+                      const response = await fetch(`/api/lists/${selectedOwnedList.id}/unshare`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ username: user.username }),
+                      });
+                      if (response.ok) {
+                        const updatedSharedWith = selectedOwnedList.sharedWith?.filter(u => u.id !== user.id);
+                        setLists(lists.map(list => list.id === selectedOwnedList.id ? { ...list, sharedWith: updatedSharedWith } : list));
+                        setSelectedOwnedList({ ...selectedOwnedList, sharedWith: updatedSharedWith });
+                      }
+                    }} className="home__button" style={{ background: 'linear-gradient(145deg, #dc3545, #c82333)', marginLeft: '10px' }}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+        <div>
+          <h2>Shared Lists</h2>
+          <div>
+            {sharedLists.map((list, index) => (
+              <button key={list.id} onClick={() => setActiveSharedTab(index)} className={`home__tab-button ${activeSharedTab === index ? 'home__tab-button--active' : ''}`}>
+                {list.name} (by {list.user?.username})
+              </button>
+            ))}
+          </div>
+          {sharedLists[activeSharedTab] && (
+            <div>
+              <h3>{sharedLists[activeSharedTab].name} (by {sharedLists[activeSharedTab].user?.username})</h3>
+              <ul>
+                {sharedLists[activeSharedTab].items?.map(item => (
+                  <li key={item.id} className="home__list-item">
+                    {item.name} - {item.description}{!!item.price && ` - $${item.price}`}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
       <button onClick={handleLogout} className="home__button">Logout</button>
     </div>
   );

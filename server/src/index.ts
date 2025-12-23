@@ -71,11 +71,16 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/lists', authenticate, async (req: any, res) => {
   try {
-    const lists = await AppDataSource.manager.find(ChristmasList, {
+    const ownedLists = await AppDataSource.manager.find(ChristmasList, {
       where: { user: { id: req.user.id } },
-      relations: ['items'],
+      relations: ['items', 'sharedWith'],
     });
-    res.json(lists);
+    const sharedLists = await AppDataSource.manager.find(ChristmasList, {
+      where: { sharedWith: { id: req.user.id } },
+      relations: ['items', 'user', 'sharedWith'],
+    });
+    const allLists = [...ownedLists, ...sharedLists];
+    res.json(allLists);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
@@ -88,6 +93,76 @@ app.post('/api/lists', authenticate, async (req: any, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     const list = await AppDataSource.manager.save(ChristmasList, { name, user });
     res.json(list);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.put('/api/lists/:id', authenticate, async (req: any, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+  try {
+    const list = await AppDataSource.manager.findOne(ChristmasList, {
+      where: { id: parseInt(id), user: { id: req.user.id } },
+    });
+    if (!list) return res.status(404).json({ message: 'List not found' });
+    list.name = name;
+    await AppDataSource.manager.save(list);
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.delete('/api/lists/:id', authenticate, async (req: any, res) => {
+  const { id } = req.params;
+  try {
+    const list = await AppDataSource.manager.findOne(ChristmasList, {
+      where: { id: parseInt(id), user: { id: req.user.id } },
+    });
+    if (!list) return res.status(404).json({ message: 'List not found' });
+    await AppDataSource.manager.remove(list);
+    res.json({ message: 'List deleted' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.post('/api/lists/:id/share', authenticate, async (req: any, res) => {
+  const { id } = req.params;
+  const { username } = req.body;
+  try {
+    const list = await AppDataSource.manager.findOne(ChristmasList, {
+      where: { id: parseInt(id), user: { id: req.user.id } },
+      relations: ['sharedWith'],
+    });
+    if (!list) return res.status(404).json({ message: 'List not found' });
+    const userToShare = await AppDataSource.manager.findOne(User, { where: { username } });
+    if (!userToShare) return res.status(404).json({ message: 'User not found' });
+    if (!list.sharedWith.some(u => u.id === userToShare.id)) {
+      list.sharedWith.push(userToShare);
+      await AppDataSource.manager.save(list);
+    }
+    res.json({ message: 'List shared' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.post('/api/lists/:id/unshare', authenticate, async (req: any, res) => {
+  const { id } = req.params;
+  const { username } = req.body;
+  try {
+    const list = await AppDataSource.manager.findOne(ChristmasList, {
+      where: { id: parseInt(id), user: { id: req.user.id } },
+      relations: ['sharedWith'],
+    });
+    if (!list) return res.status(404).json({ message: 'List not found' });
+    const userToUnshare = await AppDataSource.manager.findOne(User, { where: { username } });
+    if (!userToUnshare) return res.status(404).json({ message: 'User not found' });
+    list.sharedWith = list.sharedWith.filter(u => u.id !== userToUnshare.id);
+    await AppDataSource.manager.save(list);
+    res.json({ message: 'Sharing removed' });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }

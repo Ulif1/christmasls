@@ -1,27 +1,125 @@
 .home {
   text-align: center;
-  margin-top: 50px;
+  margin-top: 20px;
   padding: 20px;
-  background-color: #f8d7da;
-  border: 2px solid #dc3545;
-  border-radius: 10px;
-  max-width: 400px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.9), rgba(248,249,250,0.9));
+  border: 3px solid #dc3545;
+  border-radius: 20px;
+  max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
   font-family: Arial, sans-serif;
-  color: #721c24;
+  color: #155724;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.1);
 
   &__title {
     color: #dc3545;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+    margin-bottom: 20px;
   }
 
   &__button {
-    background-color: #28a745;
+    background: linear-gradient(145deg, #28a745, #218838);
     color: white;
-    padding: 10px 20px;
+    padding: 12px 24px;
     border: none;
-    border-radius: 4px;
+    border-radius: 15px;
     cursor: pointer;
     font-size: 16px;
+    font-weight: bold;
+    margin: 5px;
+    transition: transform 0.2s;
+
+    &:hover {
+      transform: scale(1.05);
+    }
+  }
+
+  &__columns {
+    display: flex;
+    gap: 20px;
+
+    & > div {
+      flex: 1;
+      padding: 15px;
+      background: linear-gradient(145deg, rgba(255,255,255,0.8), rgba(240,240,240,0.8));
+      border-radius: 15px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+  }
+
+  &__list-item {
+    background: linear-gradient(145deg, #ffffff, #f8f9fa);
+    margin: 5px 0;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid #17a2b8;
+  }
+
+  &__form {
+    margin-top: 15px;
+
+    & input {
+      width: 100%;
+      padding: 8px;
+      margin: 5px 0;
+      border: 2px solid #17a2b8;
+      border-radius: 10px;
+      box-sizing: border-box;
+      background: linear-gradient(145deg, #ffffff, #f8f9fa);
+      transition: border-color 0.3s;
+
+      &:focus {
+        border-color: #dc3545;
+        outline: none;
+      }
+    }
+  }
+
+  &__tab-button {
+    background: linear-gradient(145deg, #ffffff, #f8f9fa);
+    color: #155724;
+    padding: 10px 15px;
+    border: 2px solid #28a745;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    margin: 5px;
+    transition: all 0.3s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+    &:hover {
+      background: linear-gradient(145deg, #28a745, #218838);
+      color: white;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+
+    &--active {
+      background: linear-gradient(145deg, #dc3545, #c82333);
+      color: white;
+      border-color: #dc3545;
+    }
+  }
+
+  &__create-button {
+    background: linear-gradient(145deg, #17a2b8, #138496);
+    color: white;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    margin: 10px 0;
+    transition: all 0.3s;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+
+    &:hover {
+      background: linear-gradient(145deg, #138496, #117a8b);
+      transform: scale(1.05);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+    }
   }
 }

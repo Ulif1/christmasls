@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, ManyToMany, JoinTable } from 'typeorm';
 import { User } from './User';
 import { Item } from './Item';
 
@@ -10,8 +10,12 @@ export class ChristmasList {
   @Column()
   name!: string;
 
-  @ManyToOne(() => User, user => user.lists)
+  @ManyToOne(() => User, user => user.ownedLists)
   user!: User;
+
+  @ManyToMany(() => User, user => user.sharedLists)
+  @JoinTable()
+  sharedWith!: User[];
 
   @OneToMany(() => Item, item => item.list, { cascade: true })
   items!: Item[];

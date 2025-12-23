@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToMany } from 'typeorm';
 import { ChristmasList } from './ChristmasList';
 
 @Entity()
@@ -13,5 +13,8 @@ export class User {
   password!: string;
 
   @OneToMany(() => ChristmasList, list => list.user)
-  lists!: ChristmasList[];
+  ownedLists!: ChristmasList[];
+
+  @ManyToMany(() => ChristmasList, list => list.sharedWith)
+  sharedLists!: ChristmasList[];
 }

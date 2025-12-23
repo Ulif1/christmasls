@@ -1,6 +1,12 @@
 .app {
   min-height: 100vh;
-  background-color: #e9ecef;
-  background-image: radial-gradient(circle, #ffffff 1px, transparent 1px);
-  background-size: 20px 20px;
+  background: linear-gradient(135deg, #dc3545 0%, #28a745 25%, #17a2b8 50%, #ffffff 75%, #dc3545 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 10s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
