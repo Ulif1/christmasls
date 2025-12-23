@@ -1,0 +1,23 @@
+{
+  "name": "client",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "parcel index.html --port 3000",
+    "build": "parcel build index.html",
+    "preview": "parcel preview dist/index.html"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.14.0"
+  },
+  "devDependencies": {
+    "@parcel/transformer-less": "^2.12.0",
+    "@parcel/transformer-typescript-tsc": "^2.16.3",
+    "@types/react": "^18.3.27",
+    "@types/react-dom": "^18.2.18",
+    "less": "^4.2.0",
+    "parcel": "^2.11.0",
+    "typescript": "^5.3.3"
+  }
+}
