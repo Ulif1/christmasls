@@ -15,6 +15,9 @@ export class Item {
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   price!: number;
 
+  @Column({ default: false })
+  purchased!: boolean;
+
   @ManyToOne(() => ChristmasList, list => list.items)
   list!: ChristmasList;
 }

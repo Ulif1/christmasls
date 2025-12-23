@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import jwtDecode from 'jwt-decode';
 import './styles/home.less';
 
 interface Item {
@@ -7,6 +8,7 @@ interface Item {
   name: string;
   description?: string;
   price?: number;
+  purchased?: boolean;
 }
 
 interface User {
@@ -32,10 +34,29 @@ const Home: React.FC = () => {
   const [itemPrice, setItemPrice] = useState('');
   const [shareUsername, setShareUsername] = useState('');
   const [renameName, setRenameName] = useState('');
+  const [allUsers, setAllUsers] = useState<string[]>([]);
+  const [currentUser, setCurrentUser] = useState<string>('');
 
   useEffect(() => {
+    const token = sessionStorage.getItem('token');
+    if (token) {
+      const decoded: any = jwtDecode(token);
+      setCurrentUser(decoded.username || '');
+    }
     fetchLists();
+    fetchUsers();
   }, []);
+
+  const fetchUsers = async () => {
+    const token = sessionStorage.getItem('token');
+    const response = await fetch('/api/users', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.ok) {
+      const users: string[] = await response.json();
+      setAllUsers(users);
+    }
+  };
 
   const fetchLists = async () => {
     const token = sessionStorage.getItem('token');
@@ -180,9 +201,34 @@ const Home: React.FC = () => {
                 }
               }} className="home__button" style={{ background: 'linear-gradient(145deg, #dc3545, #c82333)' }}>Delete List</button>
               <ul>
-                {selectedOwnedList.items?.map(item => (
+                {selectedOwnedList.items?.sort((a, b) => a.id - b.id).map(item => (
                   <li key={item.id} className="home__list-item">
                     {item.name} - {item.description}{!!item.price && ` - $${item.price}`}
+                    <button onClick={async () => {
+                      const newName = prompt('New name:', item.name);
+                      if (newName) {
+                        const token = sessionStorage.getItem('token');
+                        await fetch(`/api/items/${item.id}`, {
+                          method: 'PUT',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({ name: newName, description: item.description, price: item.price }),
+                        });
+                        fetchLists();
+                      }
+                    }} className="home__button">Edit</button>
+                    <button onClick={async () => {
+                      if (window.confirm('Delete this item?')) {
+                        const token = sessionStorage.getItem('token');
+                        await fetch(`/api/items/${item.id}`, {
+                          method: 'DELETE',
+                          headers: { Authorization: `Bearer ${token}` },
+                        });
+                        fetchLists();
+                      }
+                    }} className="home__button" style={{ background: 'linear-gradient(145deg, #dc3545, #c82333)' }}>Delete</button>
                   </li>
                 ))}
               </ul>
@@ -210,15 +256,34 @@ const Home: React.FC = () => {
                 <button type="submit" className="home__button">Add Item</button>
               </form>
               <form onSubmit={handleShare} className="home__form">
-                <input
-                  type="text"
-                  placeholder="Share with username"
+                <select
                   value={shareUsername}
                   onChange={(e) => setShareUsername(e.target.value)}
-                  required
-                />
+                >
+                  <option value="">Select user</option>
+                  {allUsers.filter(u => u !== currentUser).map(user => (
+                    <option key={user} value={user}>{user}</option>
+                  ))}
+                </select>
                 <button type="submit" className="home__button">Share</button>
               </form>
+              <button onClick={async () => {
+                const token = sessionStorage.getItem('token');
+                const response = await fetch(`/api/lists/${selectedOwnedList.id}/share`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({ username: 'all' }),
+                });
+                if (response.ok) {
+                  fetchLists();
+                  alert('Shared with all users');
+                } else {
+                  alert('Failed to share');
+                }
+              }} className="home__button">Share to All Users</button>
               <div>
                 <h4>Shared with:</h4>
                 {selectedOwnedList.sharedWith?.map(user => (
@@ -259,8 +324,24 @@ const Home: React.FC = () => {
             <div>
               <h3>{sharedLists[activeSharedTab].name} (by {sharedLists[activeSharedTab].user?.username})</h3>
               <ul>
-                {sharedLists[activeSharedTab].items?.map(item => (
+                {sharedLists[activeSharedTab].items?.sort((a, b) => a.id - b.id).map(item => (
                   <li key={item.id} className="home__list-item">
+                    <input
+                      type="checkbox"
+                      checked={item.purchased || false}
+                      onChange={async (e) => {
+                        const token = sessionStorage.getItem('token');
+                        await fetch(`/api/items/${item.id}/purchase`, {
+                          method: 'PUT',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({ purchased: e.target.checked }),
+                        });
+                        fetchLists(); // Refresh
+                      }}
+                    />
                     {item.name} - {item.description}{!!item.price && ` - $${item.price}`}
                   </li>
                 ))}

@@ -2,7 +2,7 @@ import 'reflect-metadata';
 
 import express from 'express';
 import cors from 'cors';
-import { DataSource } from 'typeorm';
+import { DataSource, Not } from 'typeorm';
 import { User } from './entities/User';
 import { ChristmasList } from './entities/ChristmasList';
 import { Item } from './entities/Item';
@@ -59,7 +59,7 @@ app.post('/api/login', async (req, res) => {
   try {
     const user = await AppDataSource.manager.findOne(User, { where: { username } });
     if (user && await bcrypt.compare(password, user.password)) {
-      const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'secret');
+      const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET || 'secret');
       res.json({ message: 'Login successful', token });
     } else {
       res.status(401).json({ message: 'Invalid credentials' });
@@ -137,13 +137,20 @@ app.post('/api/lists/:id/share', authenticate, async (req: any, res) => {
       relations: ['sharedWith'],
     });
     if (!list) return res.status(404).json({ message: 'List not found' });
-    const userToShare = await AppDataSource.manager.findOne(User, { where: { username } });
-    if (!userToShare) return res.status(404).json({ message: 'User not found' });
-    if (!list.sharedWith.some(u => u.id === userToShare.id)) {
-      list.sharedWith.push(userToShare);
+    if (username === 'all') {
+      const allUsers = await AppDataSource.manager.find(User, { where: { id: Not(req.user.id) } });
+      list.sharedWith = [...list.sharedWith, ...allUsers.filter(u => !list.sharedWith.some(s => s.id === u.id))];
       await AppDataSource.manager.save(list);
+      res.json({ message: 'List shared with all users' });
+    } else {
+      const userToShare = await AppDataSource.manager.findOne(User, { where: { username } });
+      if (!userToShare) return res.status(404).json({ message: 'User not found' });
+      if (!list.sharedWith.some(u => u.id === userToShare.id)) {
+        list.sharedWith.push(userToShare);
+        await AppDataSource.manager.save(list);
+      }
+      res.json({ message: 'List shared' });
     }
-    res.json({ message: 'List shared' });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
@@ -168,6 +175,15 @@ app.post('/api/lists/:id/unshare', authenticate, async (req: any, res) => {
   }
 });
 
+app.get('/api/users', authenticate, async (req: any, res) => {
+  try {
+    const users = await AppDataSource.manager.find(User, { select: ['username'] });
+    res.json(users.map(u => u.username));
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 app.post('/api/items', authenticate, async (req: any, res) => {
   const { name, description, price, listId } = req.body;
   try {
@@ -177,6 +193,60 @@ app.post('/api/items', authenticate, async (req: any, res) => {
     if (!list) return res.status(404).json({ message: 'List not found' });
     const item = await AppDataSource.manager.save(Item, { name, description, price, list });
     res.json(item);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.put('/api/items/:id/purchase', authenticate, async (req: any, res) => {
+  const { id } = req.params;
+  const { purchased } = req.body;
+  try {
+    const item = await AppDataSource.manager.findOne(Item, {
+      where: { id: parseInt(id) },
+      relations: ['list', 'list.sharedWith'],
+    });
+    if (!item) return res.status(404).json({ message: 'Item not found' });
+    // Check if user is shared with the list
+    const isShared = item.list.sharedWith.some(u => u.id === req.user.id);
+    if (!isShared) return res.status(403).json({ message: 'Not authorized' });
+    item.purchased = purchased;
+    await AppDataSource.manager.save(item);
+    res.json(item);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.put('/api/items/:id', authenticate, async (req: any, res) => {
+  const { id } = req.params;
+  const { name, description, price } = req.body;
+  try {
+    const item = await AppDataSource.manager.findOne(Item, {
+      where: { id: parseInt(id) },
+      relations: ['list'],
+    });
+    if (!item || item.list.user.id !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
+    item.name = name;
+    item.description = description;
+    item.price = price;
+    await AppDataSource.manager.save(item);
+    res.json(item);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.delete('/api/items/:id', authenticate, async (req: any, res) => {
+  const { id } = req.params;
+  try {
+    const item = await AppDataSource.manager.findOne(Item, {
+      where: { id: parseInt(id) },
+      relations: ['list'],
+    });
+    if (!item || item.list.user.id !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
+    await AppDataSource.manager.remove(item);
+    res.json({ message: 'Item deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
