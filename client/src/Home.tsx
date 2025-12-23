@@ -140,9 +140,46 @@ const Home: React.FC = () => {
         <div>
           <h2>My Lists</h2>
           {ownedLists.map(list => (
-            <button key={list.id} onClick={() => setSelectedOwnedList(list)} className={`home__tab-button ${selectedOwnedList?.id === list.id ? 'home__tab-button--active' : ''}`}>
-              {list.name}
-            </button>
+            <div key={list.id} style={{ display: 'flex', alignItems: 'center', margin: '5px' }}>
+              <button onClick={() => setSelectedOwnedList(list)} className={`home__tab-button ${selectedOwnedList?.id === list.id ? 'home__tab-button--active' : ''}`} style={{ flex: 1 }}>
+                {list.name}
+              </button>
+              <button onClick={async () => {
+                const newName = prompt('New name:', list.name);
+                if (newName) {
+                  const token = sessionStorage.getItem('token');
+                  const response = await fetch(`/api/lists/${list.id}`, {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ name: newName }),
+                  });
+                  if (response.ok) {
+                    setLists(lists.map(l => l.id === list.id ? { ...l, name: newName } : l));
+                    if (selectedOwnedList?.id === list.id) {
+                      setSelectedOwnedList({ ...selectedOwnedList, name: newName });
+                    }
+                  }
+                }
+              }} className="home__edit-button" style={{ marginLeft: '5px' }}>✏️</button>
+              <button onClick={async () => {
+                if (window.confirm('Delete this list?')) {
+                  const token = sessionStorage.getItem('token');
+                  const response = await fetch(`/api/lists/${list.id}`, {
+                    method: 'DELETE',
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  if (response.ok) {
+                    fetchLists();
+                    if (selectedOwnedList?.id === list.id) {
+                      setSelectedOwnedList(null);
+                    }
+                  }
+                }
+              }} className="home__delete-button" style={{ marginLeft: '5px' }}>❌</button>
+            </div>
           ))}
           <button onClick={async () => {
             const token = sessionStorage.getItem('token');
@@ -160,99 +197,63 @@ const Home: React.FC = () => {
           }} className="home__create-button">🎄 Create New List 🎄</button>
           {selectedOwnedList && (
             <div>
-              <h3>{selectedOwnedList.name}</h3>
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const token = sessionStorage.getItem('token');
-                const response = await fetch(`/api/lists/${selectedOwnedList.id}`, {
-                  method: 'PUT',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                  },
-                  body: JSON.stringify({ name: renameName }),
-                });
-                if (response.ok) {
-                  setLists(lists.map(list => list.id === selectedOwnedList.id ? { ...list, name: renameName } : list));
-                  setSelectedOwnedList({ ...selectedOwnedList, name: renameName });
-                  setRenameName('');
-                }
-              }} className="home__form">
-                <input
-                  type="text"
-                  placeholder="New name"
-                  value={renameName}
-                  onChange={(e) => setRenameName(e.target.value)}
-                  required
-                />
-                <button type="submit" className="home__button">Rename List</button>
-              </form>
-              <button onClick={async () => {
-                if (window.confirm('Delete this list?')) {
-                  const token = sessionStorage.getItem('token');
-                  const response = await fetch(`/api/lists/${selectedOwnedList.id}`, {
-                    method: 'DELETE',
-                    headers: { Authorization: `Bearer ${token}` },
-                  });
-                  if (response.ok) {
-                    fetchLists();
-                    setSelectedOwnedList(null);
-                  }
-                }
-              }} className="home__button" style={{ background: 'linear-gradient(145deg, #dc3545, #c82333)' }}>Delete List</button>
-              <ul>
+              <div>
                 {selectedOwnedList.items?.sort((a, b) => a.id - b.id).map(item => (
-                  <li key={item.id} className="home__list-item">
-                    {item.name} - {item.description}{!!item.price && ` - $${item.price}`}
-                    <button onClick={async () => {
-                      const newName = prompt('New name:', item.name) || item.name;
-                      const newDesc = prompt('New description:', item.description || '') || item.description;
-                      const newPrice = prompt('New price:', item.price?.toString() || '') || item.price;
-                      const token = sessionStorage.getItem('token');
-                      const response = await fetch(`/api/items/${item.id}`, {
-                        method: 'PUT',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          Authorization: `Bearer ${token}`,
-                        },
-                        body: JSON.stringify({ name: newName, description: newDesc, price: parseFloat(newPrice) || undefined }),
-                      });
-                      if (response.ok) {
-                        const updatedItem = await response.json();
-                        setLists(lists.map(list => ({
-                          ...list,
-                          items: list.items.map(i => i.id === item.id ? updatedItem : i)
-                        })));
-                        if (selectedOwnedList) {
-                          setSelectedOwnedList({
-                            ...selectedOwnedList,
-                            items: selectedOwnedList.items.map(i => i.id === item.id ? updatedItem : i)
-                          });
-                        }
-                      }
-                    }} className="home__button">Edit</button>
-                    <button onClick={async () => {
-                      if (window.confirm('Delete this item?')) {
+                  <div key={item.id} className="home__list-item">
+                    <div className="home__item-text">
+                      {item.name} - {item.description}{!!item.price && ` - $${item.price}`}
+                    </div>
+                    <div className="home__item-buttons">
+                      <button onClick={async () => {
+                        const newName = prompt('New name:', item.name) || item.name;
+                        const newDesc = prompt('New description:', item.description || '') || item.description;
+                        const newPrice = prompt('New price:', item.price?.toString() || '') || item.price;
                         const token = sessionStorage.getItem('token');
-                        await fetch(`/api/items/${item.id}`, {
-                          method: 'DELETE',
-                          headers: { Authorization: `Bearer ${token}` },
+                        const response = await fetch(`/api/items/${item.id}`, {
+                          method: 'PUT',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({ name: newName, description: newDesc, price: newPrice ? parseFloat(newPrice as string) : undefined }),
                         });
-                        setLists(lists.map(list => ({
-                          ...list,
-                          items: list.items.filter(i => i.id !== item.id)
-                        })));
-                        if (selectedOwnedList) {
-                          setSelectedOwnedList({
-                            ...selectedOwnedList,
-                            items: selectedOwnedList.items.filter(i => i.id !== item.id)
-                          });
+                        if (response.ok) {
+                          const updatedItem = await response.json();
+                          setLists(lists.map(list => ({
+                            ...list,
+                            items: list.items.map(i => i.id === item.id ? updatedItem : i)
+                          })));
+                          if (selectedOwnedList) {
+                            setSelectedOwnedList({
+                              ...selectedOwnedList,
+                              items: selectedOwnedList.items.map(i => i.id === item.id ? updatedItem : i)
+                            });
+                          }
                         }
-                      }
-                    }} className="home__button" style={{ background: 'linear-gradient(145deg, #dc3545, #c82333)' }}>Delete</button>
-                  </li>
+                      }} className="home__edit-button">✏️</button>
+                      <button onClick={async () => {
+                        if (window.confirm('Delete this item?')) {
+                          const token = sessionStorage.getItem('token');
+                          await fetch(`/api/items/${item.id}`, {
+                            method: 'DELETE',
+                            headers: { Authorization: `Bearer ${token}` },
+                          });
+                          setLists(lists.map(list => ({
+                            ...list,
+                            items: list.items.filter(i => i.id !== item.id)
+                          })));
+                          if (selectedOwnedList) {
+                            setSelectedOwnedList({
+                              ...selectedOwnedList,
+                              items: selectedOwnedList.items.filter(i => i.id !== item.id)
+                            });
+                          }
+                        }
+                      }} className="home__delete-button">❌</button>
+                    </div>
+                  </div>
                 ))}
-              </ul>
+              </div>
               <form onSubmit={handleAddItem} className="home__form">
                 <input
                   type="text"
