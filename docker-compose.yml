@@ -17,6 +17,7 @@ services:
     environment:
       - NODE_ENV=development
       - DATABASE_URL=postgresql://user:password@postgres:5432/christmasdb
+      - JWT_SECRET=your-secret-key
     depends_on:
       - postgres
 

@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { ChristmasList } from './ChristmasList';
 
 @Entity()
 export class User {
@@ -10,4 +11,7 @@ export class User {
 
   @Column()
   password!: string;
+
+  @OneToMany(() => ChristmasList, list => list.user)
+  lists!: ChristmasList[];
 }
