@@ -11,9 +11,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "noEmitOnError": true,
-    "forceConsistentCasingInFileNames": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
