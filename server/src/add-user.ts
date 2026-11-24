@@ -10,7 +10,7 @@ const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
   entities: [User, ChristmasList, Item],
-  synchronize: true,
+  synchronize: false,
 });
 
 async function addUser() {

@@ -16,7 +16,7 @@ const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
   entities: [User, ChristmasList, Item],
-  synchronize: true,
+  synchronize: false,
 });
 
 const authenticate = (req: any, res: any, next: any) => {

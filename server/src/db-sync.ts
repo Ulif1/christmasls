@@ -1,21 +1,29 @@
-import { DataSource } from 'typeorm';
-import { User } from './entities/User';
-import { ChristmasList } from './entities/ChristmasList';
-import { Item } from './entities/Item';
+import { driver } from './db';
+import { assertSchema, syncSchema } from './db/schema';
 
-const AppDataSource = new DataSource({
-  type: 'postgres',
-  url: process.env.DATABASE_URL,
-  entities: [User, ChristmasList, Item],
-  synchronize: true, // For dev, auto-sync schema
-});
-
-AppDataSource.initialize()
-  .then(() => {
+async function main(): Promise<void> {
+  const check = process.argv.includes('--check');
+  await driver.connect();
+  if (check) {
+    await assertSchema(driver);
+    console.log('Database schema is up to date');
+  } else {
+    await syncSchema(driver);
     console.log('Database synchronized');
+  }
+}
+
+main()
+  .then(async () => {
+    await driver.close();
     process.exit(0);
   })
-  .catch((error) => {
+  .catch(async (error) => {
     console.error('Error synchronizing database:', error);
+    try {
+      await driver.close();
+    } catch {
+      // ignore close failures; the original error is what matters
+    }
     process.exit(1);
   });
