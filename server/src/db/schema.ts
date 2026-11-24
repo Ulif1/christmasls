@@ -37,6 +37,8 @@ interface ColumnSpec {
   type: string;
   nullable: boolean;
   default?: 'nextval' | 'false';
+  precision?: number;
+  scale?: number;
 }
 
 const COLUMNS: Record<Table, readonly ColumnSpec[]> = {
@@ -54,7 +56,7 @@ const COLUMNS: Record<Table, readonly ColumnSpec[]> = {
     { name: 'id', type: 'int4', nullable: false, default: 'nextval' },
     { name: 'name', type: 'text', nullable: false },
     { name: 'description', type: 'text', nullable: true },
-    { name: 'price', type: 'numeric', nullable: true },
+    { name: 'price', type: 'numeric', nullable: true, precision: 10, scale: 2 },
     { name: 'purchased', type: 'bool', nullable: false, default: 'false' },
     { name: 'list_id', type: 'int4', nullable: false },
   ],
@@ -125,6 +127,8 @@ type ColumnRow = {
   udt_name: string;
   is_nullable: string;
   column_default: string | null;
+  numeric_precision: number | null;
+  numeric_scale: number | null;
 };
 type PrimaryKeyRow = { table_name: string; column_name: string };
 type UniqueRow = { table_name: string; columns: string[] };
@@ -169,7 +173,8 @@ export async function assertSchema(db: SqlExecutor): Promise<void> {
         [TABLES],
       ),
       db.query<ColumnRow>(
-        `select table_name, column_name, udt_name, is_nullable, column_default
+        `select table_name, column_name, udt_name, is_nullable, column_default,
+                numeric_precision, numeric_scale
           from information_schema.columns
           where table_schema = 'public' and table_name = any($1::text[])`,
         [TABLES],
@@ -261,6 +266,16 @@ export async function assertSchema(db: SqlExecutor): Promise<void> {
       }
       if (actual.udt_name !== expected.type) {
         defects.push(`column "${key}" has type "${actual.udt_name}", expected "${expected.type}"`);
+      }
+      if (
+        expected.precision !== undefined &&
+        (actual.numeric_precision !== expected.precision || actual.numeric_scale !== expected.scale)
+      ) {
+        const actualSize = `${actual.numeric_precision ?? 'null'},${actual.numeric_scale ?? 'null'}`;
+        defects.push(
+          `column "${key}" has numeric precision/scale (${actualSize}), ` +
+            `expected (${expected.precision},${expected.scale})`,
+        );
       }
       const nullable = actual.is_nullable === 'YES';
       if (nullable !== expected.nullable) {

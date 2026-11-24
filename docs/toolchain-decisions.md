@@ -1,116 +1,105 @@
-# Toolchain decisions (TS 7.0.2 emit probe)
+# Toolchain decisions
 
-Status: WP0 + WP1 complete on branch `upgrade/ts7-model-driver` (base `4a199ed`). Nothing committed.
+Status: final state of branch `upgrade/ts7-model-driver`. This is a decision
+record for maintainers, not a work log. The server runs on a raw-`pg` model
+layer; TypeORM, its entities, and decorator emit metadata are gone.
 
-## Baseline observed
+## Final toolchain and pins
 
-| Item | Value |
+| Component | Version |
 | --- | --- |
-| node | v26.13.1 |
-| npm | 12.2.3 |
-| tsc (probe project) | Version 7.0.2 |
-| docker / compose | 29.10.0 / 5.8.0, host `x86_64` |
-| postgres (compose) | still pinned to `postgres:15` → server_version `15.20` |
-| scratch DB | `christmasdb_upgrade` on `localhost:5432`, user `user` |
-| probe dir | `/tmp/opencode/ts7-probe` (throwaway) |
+| Node runtime / images | `node:26-alpine` |
+| TypeScript | `7.0.2` — exact pin in `server` and `client` |
+| Express | `5.3.0` |
+| pg | `8.23.1` |
+| React / React DOM | `19.3.1` |
+| react-router | `8.5.2` |
+| Parcel | `2.16.4` |
+| PostgreSQL | `postgres:18-alpine` |
+| Platform | `linux/amd64` / x86-64 |
 
-## Chosen config: A (`module: commonjs` + `moduleResolution: bundler`)
+`typescript` is deliberately exact, not a caret range: the server tsconfig uses
+a combination that only TS 7 accepts (see below), so a silent fallback to a 5.x
+compiler must be impossible. The other runtime versions above are the versions
+declared and locked in `server/package.json`, `client/package.json`, and their
+lockfiles. Docker images are pinned to the tags shown.
 
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "commonjs",
-    "moduleResolution": "bundler",
-    "types": ["node"],
-    "rootDir": "./src",
-    "outDir": "./dist",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "isolatedModules": true,
-    "noEmitOnError": true,
-    "forceConsistentCasingInFileNames": true
-  },
-  "include": ["src/**/*.ts"]
-}
-```
+## TypeScript configuration
 
-## Gate matrix (exit codes)
+The server compiles with `target: ES2022`, `module: commonjs`,
+`moduleResolution: bundler`, `types: ["node"]`, `strict: true`,
+`isolatedModules: true`, and `noEmitOnError: true`.
 
-| # | Gate | A: commonjs+bundler | B: nodenext+nodenext |
-| --- | --- | --- | --- |
-| 1 | `npx tsc --version` | 0 · `Version 7.0.2` | 0 |
-| 2 | `npx tsc -p tsconfig.{a,b}.json` | 0 · flat `dist/` (probe.js, errors.js, db/types.js) | 0 · same |
-| 3 | emit is CJS | 7× `require(`, 0 ESM `import`/`export` | same shape |
-| 4 | `node dist/probe.js` | 0 · `probe ok` | 0 · `probe ok` |
-| 5 | `npx tsx src/probe.ts` | 0 · `probe ok` | (not needed) |
-| 6 | `noEmitOnError` (bad `const bad: number = 'x'`) | 1 · TS2322 · dist sha + mtime unchanged ✅ | — |
-| 7 | top-level await | 1 · TS1378 (not allowed) ✅ | 1 · TS1309 ✅ |
-| 8 | `--noEmit` clean | 0 | 0 |
-| 9 | `types: []` expecting TS2591 | **0 — see deviation 1** | 0 (same cause) |
-| 10 | `return res.json(...)` expecting TS2322 | **0 — see deviation 2** | 0 (same) |
+`module: commonjs` keeps the emitted server as plain `require()` code, which is
+what the Docker `node:26-alpine` image runs directly. `moduleResolution:
+bundler` gives the resolver the package-exports behaviour the code was written
+against.
 
-Cross-check on the old compiler: `typescript@5.9.3` with config **A** exits **2** with `error TS5095: Option 'bundler' can only be used when 'module' is set to 'preserve' or to 'es2015' or later.` TS 5.9.3 accepts config B (exit 0). So A is a TS 7-only config: `typescript` must be pinned to exactly `7.0.2` in `server/package.json`, or CI/dev boxes silently fall back to `TS5095`.
+That pair is TS 7-only. On TypeScript 5.x it fails with `TS5095: Option
+'bundler' can only be used when 'module' is set to 'preserve' or to 'es2015' or
+later.` This is exactly why `typescript` is pinned to `7.0.2` with no range on
+both sides of the repo. Do not loosen the pin without re-probing the tsconfig.
 
-## Real surface exercised by the probe
+## Runtime architecture: Models over a Driver
 
-- `AppError extends Error` + subclass: emit is a native `class ... extends Error` with `status;` field declaration, no `_super`/`setPrototypeOf` hack; `instanceof`, `name`, `status`, `stack` all verified at runtime.
-- Closed `Scalar | Cond | Where | SelectSpec | Row | Store | Driver | DriverErrorCode | DriverError` declarations compile and are implementable (in-memory `Driver` with `transaction<T>` callback).
-- Interop: `import express from 'express'`, `import { Pool } from 'pg'`, default imports of `bcryptjs`/`jsonwebtoken`/`cors` all emit `__importDefault(require(...))`; `pool.query('select 1')` ran against the scratch DB.
-- `express.RequestHandler` with `req.body ?? {}` typechecks; Express 5 error middleware takes `unknown`.
+- `server/src/models/` holds `UserModel`, `ListModel`, and `ItemModel`; they own
+  authorization and batched relation loading.
+- Each model talks to a `Table<Row>` from `server/src/data/table.ts`, which maps
+  camelCase properties to snake_case columns and validates identifiers.
+- `Table` builds `SelectSpec`/`Where` objects and hands them to a `Driver`.
+- `server/src/db/postgres.ts` is the only SQL compiler: it quotes identifiers,
+  binds every value as `$n`, and translates pg error codes.
+- `PgDriver.transaction` wraps a callback in one transaction and preserves
+  application errors unchanged.
+- `server/src/db/schema.ts` owns DDL and the structural `assertSchema` check.
 
-## `server/tsconfig.json` to use in the next work package (verbatim)
+Invariant: application SQL lives only in `server/src/db/postgres.ts` and
+`server/src/db/schema.ts`. Models, routes, and scripts must go through `Table`
+or the schema tooling; no controller should build a query string. This keeps
+authorization testable at the model boundary and the HTTP layer free of query
+construction.
 
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "commonjs",
-    "moduleResolution": "bundler",
-    "types": ["node"],
-    "rootDir": "./src",
-    "outDir": "./dist",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "isolatedModules": true,
-    "noEmitOnError": true,
-    "forceConsistentCasingInFileNames": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
-  },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
-}
-```
+## Database and Postgres 18
 
-`experimentalDecorators` + `emitDecoratorMetadata` are TEMPORARY: required only by the existing TypeORM entities, and must be dropped when the raw-`pg` model driver replaces TypeORM.
+Compose now runs `postgres:18-alpine`. Postgres 18 changed the default data
+directory to `/var/lib/postgresql`, so the compose volume mounts there rather
+than the old `/var/lib/postgresql/data` path.
 
-## Deviations and surprises
+The dev database is recreated, not migrated. Its data is deliberately
+disposable: there is no backfill, no data-transfer step, and no expectation that
+an old volume keeps working across this cutover. `npm run db:sync` creates the
+schema from scratch and `npm run db:sync --check` proves the live schema matches.
 
-1. **`types: ["node"]` is not load-bearing in this project.** With `types: []` the probe still exits 0 because `@types/express`/`@types/pg` import `@types/node` transitively (confirmed via `--listFiles`). The option is genuinely honoured (`types: ["definitely-not-a-types-pkg"]` → TS2688), and in a project that does not import express, `types: []` does fail with `TS2591: Cannot find name 'process'`. Keep `"types": ["node"]` for standalone scripts, but do not expect it to gate anything once express types are in the program. TS 5.9.3 behaves identically.
-2. **`return res.json(...)` typechecks.** TS allows returning a value from a function contextually typed as `void`, so the plan's expected TS2322 never appears — `RequestHandler` returns `void`, and this rule predates TS 7 (verified: TS 5.9.3 also exits 0). Enforcing `res.json(...); return;` needs a lint rule (`no-confusing-void-expression`), not the type system.
-3. Compose still runs `postgres:15` (server_version 15.20), not the target `postgres:18-alpine`; compose was deliberately left untouched. Both target image tags exist with `linux/amd64`.
-4. Base image tags verified via `docker manifest inspect`: `node:26-alpine` and `postgres:18-alpine` both resolve for amd64.
-5. `target: ES2022` flips `useDefineForClassFields` to `true` (the old config used ES2020, i.e. `false`). Class fields now emit as `status;` own-property defines. Verified harmless for the `Error` subclasses; if a remaining TypeORM entity misbehaves before removal, set `"useDefineForClassFields": false` rather than lowering the target.
+## Cutover: migration-free by decision
 
-## WP2 transitional state — do not deploy
+The cutover is migration-free. The old TypeORM naming and the new schema do not
+agree, so the old application must never run against the new database, and the
+new application starts on a fresh schema. That is acceptable only because the
+data is disposable.
 
-WP2 introduces the raw-`pg` `Store`/`Driver` contract and `db:sync`, but it is not
-yet a deployable state. The following are intentional, time-boxed risks:
+Any environment whose data is not disposable (staging with retained data,
+production, a shared demo) needs an explicit data migration before this branch
+is deployed there. Do not assume `db:sync` migrates rows; it only creates
+missing tables and verifies structure.
 
-- **Entities still use TypeORM's default table names** (`user`, `christmas_list`,
-  `item`, `list_share`) until WP5 rewrites them against the new driver. Until
-  then, the TypeORM app and the new schema do not agree.
-- **The old app must never run against `christmasdb_upgrade`.** Its TypeORM
-  naming and the WP2 schema would diverge and could silently write to the wrong
-  tables.
-- **The dev database is reset rather than migrated.** This is approved; the data
-  is disposable. There is no migration path from the old TypeORM schema.
-- **`db:sync` is wired into the start path in WP8**, not before. Until then it is
-  a manual command (`npm run db:sync`).
-- **`assertSchema` becomes the boot-time guard in WP5** and is the authoritative
-  structural check from then on. `db:sync --check` already uses it, and it
-  verifies columns, primary keys, the `list_shares` UNIQUE constraint, foreign
-  keys with `ON DELETE CASCADE`, and the two indexes.
+## Known deferred items
+
+- `client/.parcel-cache` is still tracked in git: 7 files, about 40 MB. It
+  should be removed from the index and ignored, but that is a separate cleanup.
+- `JWT_SECRET` falls back to a known default, CORS is open, and tokens have no
+  expiry. Acceptable for the local dev target, not for exposure.
+- Both Docker images run development mode (`npm run dev`, Parcel dev server),
+  not production builds.
+- The client keeps `@parcel/resolver-default` with `packageExports: true`. This
+  was verified empirically: removing it and rebuilding from a clean
+  `.parcel-cache` fails with `Cannot load file './index' from module
+  'react-router'`, so it is required despite Parcel 2.16 enabling package
+  exports by default.
+
+## Verification
+
+The maintained gates are `npm run typecheck`, `npm run typecheck:scripts`,
+`npm run build`, `npx tsx scripts/selfcheck-table.ts`, and `npx tsx
+scripts/selfcheck-models.ts` against a fresh database. The HTTP gate is `npm
+run smoke` inside the compose server container. `db:sync --check` is the
+authoritative structural check at boot and in CI.

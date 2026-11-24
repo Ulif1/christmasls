@@ -23,7 +23,10 @@ interface CallResult {
 
 let leaked = false;
 
-/** Recursively rejects any `password`/`passwordHash` key at any depth. */
+/**
+ * Recursively rejects any key containing `password` (case-insensitive) at any
+ * depth, covering `passwordHash` in JSON and the literal `password_hash` column.
+ */
 function containsPasswordKey(value: unknown, seen: Set<unknown> = new Set()): boolean {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -38,7 +41,7 @@ function containsPasswordKey(value: unknown, seen: Set<unknown> = new Set()): bo
   }
 
   return Object.entries(value as Record<string, unknown>).some(
-    ([key, entry]) => /^password(hash)?$/i.test(key) || containsPasswordKey(entry, seen),
+    ([key, entry]) => /password/i.test(key) || containsPasswordKey(entry, seen),
   );
 }
 
@@ -94,6 +97,15 @@ function check(label: string, condition: boolean, detail?: string): void {
 }
 
 async function main(): Promise<void> {
+  // Self-test before touching the API: the recursive guard must catch the
+  // literal database column name, not just the camelCase JSON key. Kept out of
+  // the `passed` count so that number stays a count of API assertions.
+  if (!containsPasswordKey({ nested: [{ password_hash: 'x' }] })) {
+    console.error('✗ leak guard self-test: password_hash was not detected');
+    process.exit(1);
+  }
+  console.log('✓ leak guard self-test: password_hash is detected at any depth');
+
   const stamp = Date.now().toString(36);
   const userA = `smoke_a_${stamp}`;
   const userB = `smoke_b_${stamp}`;

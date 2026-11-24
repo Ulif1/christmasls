@@ -9,6 +9,7 @@ import { verifyDatabaseSchema } from './db/tooling';
 import { authenticate } from './auth';
 import { errorHandler } from './error-middleware';
 import { isAppError, toInternal, ValidationError } from './errors';
+import { parseId } from './http/parse-id';
 import { createModels } from './models';
 import type { ItemPatch } from './models/types';
 
@@ -83,12 +84,12 @@ app.put('/api/lists/:id', authenticate, async (req, res) => {
   if (typeof body.name !== 'string' || !body.name) {
     throw new ValidationError('Name is required');
   }
-  const list = await models.lists.rename(req.user!.id, Number(req.params.id), body.name);
+  const list = await models.lists.rename(req.user!.id, parseId(req.params.id), body.name);
   res.json({ id: list.id, name: list.name });
 });
 
 app.delete('/api/lists/:id', authenticate, async (req, res) => {
-  await models.lists.remove(req.user!.id, Number(req.params.id));
+  await models.lists.remove(req.user!.id, parseId(req.params.id));
   res.json({ message: 'List deleted' });
 });
 
@@ -99,7 +100,7 @@ app.post('/api/lists/:id/share', authenticate, async (req, res) => {
     throw new ValidationError('Username is required');
   }
 
-  const listId = Number(req.params.id);
+  const listId = parseId(req.params.id);
   if (username === 'all') {
     await models.lists.shareWithAll(req.user!.id, listId);
     res.json({ message: 'List shared with all users' });
@@ -117,7 +118,7 @@ app.post('/api/lists/:id/unshare', authenticate, async (req, res) => {
     throw new ValidationError('Username is required');
   }
 
-  await models.lists.unshare(req.user!.id, Number(req.params.id), username);
+  await models.lists.unshare(req.user!.id, parseId(req.params.id), username);
   res.json({ message: 'Sharing removed' });
 });
 
@@ -147,10 +148,13 @@ app.post('/api/items', authenticate, async (req, res) => {
 
 app.put('/api/items/:id/purchase', authenticate, async (req, res) => {
   const body = req.body ?? {};
+  if (typeof body.purchased !== 'boolean') {
+    throw new ValidationError('Invalid purchased value');
+  }
   const item = await models.items.setPurchased(
     req.user!.id,
-    Number(req.params.id),
-    Boolean(body.purchased),
+    parseId(req.params.id),
+    body.purchased,
   );
   res.json(item);
 });
@@ -165,7 +169,7 @@ app.put('/api/items/:id', authenticate, async (req, res, next) => {
   try {
     const item = await models.items.updateOwned(
       req.user!.id,
-      Number(req.params.id),
+      parseId(req.params.id),
       patch,
     );
     res.json(item);
@@ -176,7 +180,7 @@ app.put('/api/items/:id', authenticate, async (req, res, next) => {
 
 app.delete('/api/items/:id', authenticate, async (req, res, next) => {
   try {
-    await models.items.removeOwned(req.user!.id, Number(req.params.id));
+    await models.items.removeOwned(req.user!.id, parseId(req.params.id));
     res.json({ message: 'Item deleted' });
   } catch (error) {
     next(toInternal(error, 'Error Deleting Item'));

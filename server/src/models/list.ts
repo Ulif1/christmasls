@@ -115,12 +115,22 @@ export class ListModel {
         sharesByList.set(share.listId, bucket);
       }
 
-      const sharedWith = (listId: number): PublicUser[] =>
-        (sharesByList.get(listId) ?? [])
+      // The owner of each visible list, so a legacy self-share row can be
+      // filtered out of `sharedWith` instead of showing the owner back to
+      // themselves.
+      const ownersByList = new Map<number, number>(
+        [...ownedRows, ...sharedRows].map((row) => [row.id, row.userId]),
+      );
+
+      const sharedWith = (listId: number): PublicUser[] => {
+        const ownerId = ownersByList.get(listId);
+        return (sharesByList.get(listId) ?? [])
+          .filter((share) => share.userId !== ownerId)
           .map((share) => usersById.get(share.userId))
           .filter((user): user is PublicUser => user !== undefined)
           .map(toPublicUser)
           .sort((a, b) => a.id - b.id);
+      };
 
       const items = (listId: number): ItemView[] =>
         (itemsByList.get(listId) ?? []).map(toItemView);
@@ -229,31 +239,50 @@ export class ListModel {
     });
   }
 
-  shareWithAll(actorId: number, listId: number): Promise<number> {
-    return run(() =>
-      this.driver.transaction(async (tx) => {
-        // Inside a transaction we build tables over the provided store; calling
-        // `createModels(tx)` would hand out the wrong driver/connection.
-        const lists = new Table<ListRow>(tx, this.defs.lists);
-        const shares = new Table<ShareRow>(tx, this.defs.shares);
-        const users = new Table<PublicUser>(tx, this.defs.usersPublic);
+  async shareWithAll(actorId: number, listId: number): Promise<number> {
+    try {
+      return await run(() =>
+        this.driver.transaction(async (tx) => {
+          // Inside a transaction we build tables over the provided store; calling
+          // `createModels(tx)` would hand out the wrong driver/connection.
+          const lists = new Table<ListRow>(tx, this.defs.lists);
+          const shares = new Table<ShareRow>(tx, this.defs.shares);
+          const users = new Table<PublicUser>(tx, this.defs.usersPublic);
 
-        const owned = await lists.findOne({ id: { eq: listId }, userId: { eq: actorId } });
-        if (!owned) {
-          throw new NotFoundError('List not found');
-        }
+          const owned = await lists.findOne({ id: { eq: listId }, userId: { eq: actorId } });
+          if (!owned) {
+            throw new NotFoundError('List not found');
+          }
 
-        const others = await users.findMany({ where: { id: { ne: actorId } } });
-        const existing = await shares.findMany({ where: { listId: { eq: listId } } });
-        const have = new Set(existing.map((share) => share.userId));
-        const missing = others.filter((user) => !have.has(user.id));
+          const others = await users.findMany({ where: { id: { ne: actorId } } });
+          const existing = await shares.findMany({ where: { listId: { eq: listId } } });
+          const have = new Set(existing.map((share) => share.userId));
+          const missing = others.filter((user) => !have.has(user.id));
 
-        // `insertMany([])` is a no-op, so an already fully shared list is fine.
-        await shares.insertMany(missing.map((user) => ({ listId, userId: user.id })));
+          // `insertMany([])` is a no-op, so an already fully shared list is fine.
+          await shares.insertMany(missing.map((user) => ({ listId, userId: user.id })));
 
-        return have.size + missing.length;
-      }),
-    );
+          return have.size + missing.length;
+        }),
+      );
+    } catch (error) {
+      // A concurrent share-all won the UNIQUE(list_id, user_id) race. Our
+      // transaction rolled back as a whole, but the winner committed the exact
+      // rows we were inserting, so the operation has effectively succeeded.
+      if (error instanceof ConflictError) {
+        return run(async () => {
+          const rows = await this.tables.shares.findMany({
+            where: { listId: { eq: listId } },
+          });
+          return rows.length;
+        });
+      }
+      // Keep the previous mapping for non-conflict failures (for example a
+      // foreign-key violation), which `run` already translated once.
+      return run(async () => {
+        throw error;
+      });
+    }
   }
 
   unshare(actorId: number, listId: number, username: string): Promise<void> {

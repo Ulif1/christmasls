@@ -62,8 +62,16 @@ export class ItemModel {
         throw new NotFoundError('Item not found');
       }
 
-      // Preserved today's behaviour: only explicit shares may tick an item off,
-      // so the owner (who is not in `list_shares`) gets 403 here.
+      // The owner can never purchase, even if a legacy self-share row exists.
+      const isOwner = await this.lists.exists({
+        id: { eq: item.listId },
+        userId: { eq: actorId },
+      });
+      if (isOwner) {
+        throw new ForbiddenError('Not authorized');
+      }
+
+      // Only explicit shares may tick an item off.
       const shared = await this.shares.exists({
         listId: { eq: item.listId },
         userId: { eq: actorId },
