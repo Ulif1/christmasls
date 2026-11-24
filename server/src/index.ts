@@ -9,7 +9,7 @@ import { verifyDatabaseSchema } from './db/tooling';
 import { authenticate } from './auth';
 import { errorHandler } from './error-middleware';
 import { isAppError, toInternal, ValidationError } from './errors';
-import { parseId } from './http/parse-id';
+import { parseId, parsePositiveInt } from './http/parse-id';
 import { createModels } from './models';
 import type { ItemPatch } from './models/types';
 
@@ -129,12 +129,12 @@ app.get('/api/users', authenticate, async (_req, res) => {
 app.post('/api/items', authenticate, async (req, res) => {
   const body = req.body ?? {};
   const name = body.name;
-  const listId = Number(body.listId);
+  const listId = parsePositiveInt(body.listId);
   if (typeof name !== 'string' || !name) {
     throw new ValidationError('Name is required');
   }
-  if (!Number.isInteger(listId) || listId <= 0) {
-    throw new ValidationError('List id is required');
+  if (listId === null) {
+    throw new ValidationError('Invalid list id');
   }
 
   const item = await models.items.create(req.user!.id, {

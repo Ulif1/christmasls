@@ -240,49 +240,66 @@ export class ListModel {
   }
 
   async shareWithAll(actorId: number, listId: number): Promise<number> {
-    try {
-      return await run(() =>
-        this.driver.transaction(async (tx) => {
-          // Inside a transaction we build tables over the provided store; calling
-          // `createModels(tx)` would hand out the wrong driver/connection.
-          const lists = new Table<ListRow>(tx, this.defs.lists);
-          const shares = new Table<ShareRow>(tx, this.defs.shares);
-          const users = new Table<PublicUser>(tx, this.defs.usersPublic);
+    const maxAttempts = 3;
+    let lastConflict: ConflictError | undefined;
 
-          const owned = await lists.findOne({ id: { eq: listId }, userId: { eq: actorId } });
-          if (!owned) {
-            throw new NotFoundError('List not found');
-          }
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        return await run(() =>
+          this.driver.transaction(async (tx) => {
+            // Inside a transaction we build tables over the provided store;
+            // calling `createModels(tx)` would hand out the wrong driver.
+            const lists = new Table<ListRow>(tx, this.defs.lists);
+            const shares = new Table<ShareRow>(tx, this.defs.shares);
+            const users = new Table<PublicUser>(tx, this.defs.usersPublic);
 
-          const others = await users.findMany({ where: { id: { ne: actorId } } });
-          const existing = await shares.findMany({ where: { listId: { eq: listId } } });
-          const have = new Set(existing.map((share) => share.userId));
-          const missing = others.filter((user) => !have.has(user.id));
+            // A list can be deleted while we are retrying.
+            const owned = await lists.findOne({ id: { eq: listId }, userId: { eq: actorId } });
+            if (!owned) {
+              throw new NotFoundError('List not found');
+            }
 
-          // `insertMany([])` is a no-op, so an already fully shared list is fine.
-          await shares.insertMany(missing.map((user) => ({ listId, userId: user.id })));
+            const others = await users.findMany({ where: { id: { ne: actorId } } });
+            const existing = await shares.findMany({ where: { listId: { eq: listId } } });
+            const have = new Set(existing.map((share) => share.userId));
+            const missing = others.filter((user) => !have.has(user.id));
 
-          return have.size + missing.length;
-        }),
-      );
-    } catch (error) {
-      // A concurrent share-all won the UNIQUE(list_id, user_id) race. Our
-      // transaction rolled back as a whole, but the winner committed the exact
-      // rows we were inserting, so the operation has effectively succeeded.
-      if (error instanceof ConflictError) {
-        return run(async () => {
-          const rows = await this.tables.shares.findMany({
-            where: { listId: { eq: listId } },
-          });
-          return rows.length;
-        });
+            if (missing.length === 0) {
+              return existing.length;
+            }
+
+            await shares.insertMany(missing.map((user) => ({ listId, userId: user.id })));
+
+            return existing.length + missing.length;
+          }),
+        );
+      } catch (error) {
+        // The single multi-row INSERT is atomic: one conflicting row aborts the
+        // whole statement, so the other users were not written. Never report
+        // success here; a concurrent writer changed `existing`, and the next
+        // attempt recomputes the missing set from the committed state.
+        if (!(error instanceof ConflictError)) {
+          throw error;
+        }
+        lastConflict = error;
       }
-      // Keep the previous mapping for non-conflict failures (for example a
-      // foreign-key violation), which `run` already translated once.
-      return run(async () => {
-        throw error;
-      });
     }
+
+    // Attempts are exhausted. Only claim success if a fresh read proves every
+    // non-actor user now has a share; otherwise surface the real failure.
+    return run(async () => {
+      const shares = await this.tables.shares.findMany({
+        where: { listId: { eq: listId } },
+      });
+      const others = await this.tables.usersPublic.findMany({
+        where: { id: { ne: actorId } },
+      });
+      const have = new Set(shares.map((share) => share.userId));
+      if (!others.every((user) => have.has(user.id))) {
+        throw lastConflict ?? new ConflictError('Already exists');
+      }
+      return shares.length;
+    });
   }
 
   unshare(actorId: number, listId: number, username: string): Promise<void> {

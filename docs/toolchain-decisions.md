@@ -30,10 +30,11 @@ The server compiles with `target: ES2022`, `module: commonjs`,
 `moduleResolution: bundler`, `types: ["node"]`, `strict: true`,
 `isolatedModules: true`, and `noEmitOnError: true`.
 
-`module: commonjs` keeps the emitted server as plain `require()` code, which is
-what the Docker `node:26-alpine` image runs directly. `moduleResolution:
-bundler` gives the resolver the package-exports behaviour the code was written
-against.
+`module: commonjs` keeps the emitted server as plain `require()` code. The
+Docker `node:26-alpine` images do not run that output: both server and client
+images run development mode (`npm run dev`, i.e. `tsx watch` for the server).
+`moduleResolution: bundler` gives the resolver the package-exports behaviour the
+code was written against.
 
 That pair is TS 7-only. On TypeScript 5.x it fails with `TS5095: Option
 'bundler' can only be used when 'module' is set to 'preserve' or to 'es2015' or
@@ -61,14 +62,16 @@ construction.
 
 ## Database and Postgres 18
 
-Compose now runs `postgres:18-alpine`. Postgres 18 changed the default data
-directory to `/var/lib/postgresql`, so the compose volume mounts there rather
-than the old `/var/lib/postgresql/data` path.
+Compose now runs `postgres:18-alpine`. In the Postgres 18 image `PGDATA` is
+`/var/lib/postgresql/18/docker`, while `/var/lib/postgresql` is the declared
+mount root (`VOLUME`). The compose volume therefore mounts at
+`/var/lib/postgresql`, not at the old `/var/lib/postgresql/data` path.
 
 The dev database is recreated, not migrated. Its data is deliberately
 disposable: there is no backfill, no data-transfer step, and no expectation that
-an old volume keeps working across this cutover. `npm run db:sync` creates the
-schema from scratch and `npm run db:sync --check` proves the live schema matches.
+an old volume keeps working across this cutover. `npm run db:sync` creates any
+missing tables but does not verify structure; `npm run db:sync -- --check` runs
+the structural check and proves the live schema matches.
 
 ## Cutover: migration-free by decision
 
@@ -80,7 +83,8 @@ data is disposable.
 Any environment whose data is not disposable (staging with retained data,
 production, a shared demo) needs an explicit data migration before this branch
 is deployed there. Do not assume `db:sync` migrates rows; it only creates
-missing tables and verifies structure.
+missing tables and does not verify structure. Run `npm run db:sync -- --check`
+to verify it.
 
 ## Known deferred items
 
@@ -90,16 +94,17 @@ missing tables and verifies structure.
   expiry. Acceptable for the local dev target, not for exposure.
 - Both Docker images run development mode (`npm run dev`, Parcel dev server),
   not production builds.
-- The client keeps `@parcel/resolver-default` with `packageExports: true`. This
-  was verified empirically: removing it and rebuilding from a clean
+- The client keeps `@parcel/resolver-default` with `packageExports: true`.
+  Package exports are opt-in in Parcel 2.16, so this setting is what enables
+  them for the client build. Removing it and rebuilding from a clean
   `.parcel-cache` fails with `Cannot load file './index' from module
-  'react-router'`, so it is required despite Parcel 2.16 enabling package
-  exports by default.
+  'react-router'`, which is why it is required.
 
 ## Verification
 
 The maintained gates are `npm run typecheck`, `npm run typecheck:scripts`,
 `npm run build`, `npx tsx scripts/selfcheck-table.ts`, and `npx tsx
 scripts/selfcheck-models.ts` against a fresh database. The HTTP gate is `npm
-run smoke` inside the compose server container. `db:sync --check` is the
-authoritative structural check at boot and in CI.
+run smoke` inside the compose server container. `npm run db:sync -- --check` is
+the authoritative structural check; the server runs the same `assertSchema`
+verification at boot.

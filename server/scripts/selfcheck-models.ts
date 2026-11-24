@@ -105,12 +105,24 @@ async function main(): Promise<void> {
 
     await check(6, 'a seeded self-share yields the owned list exactly once, without owner', async () => {
       await sharesTable.insert({ listId: list.id, userId: a.id });
+      const selfShareItem = await models.items.create(a.id, {
+        name: 'Self-share item',
+        listId: list.id,
+      });
       const views = await models.lists.listForUser(a.id);
       const matches = views.filter((view) => view.id === list.id);
       assert.strictEqual(matches.length, 1, 'the list must not be duplicated');
       const view = matches[0];
       assert.ok(view, 'expected the owned list');
       assert.ok(!('owner' in view), "an owned list must not carry an 'owner' property");
+      assert.ok(
+        !view.sharedWith.some((user) => user.id === a.id),
+        'the owner must not appear in sharedWith',
+      );
+      await assert.rejects(
+        () => models.items.setPurchased(a.id, selfShareItem.id, true),
+        isAppErrorWithStatus(ForbiddenError, 403),
+      );
     });
 
     await check(7, 'sharing with yourself is a ValidationError (400)', async () => {
