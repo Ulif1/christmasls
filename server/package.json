@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "db:sync": "tsx src/db-sync.ts",
-    "add-user": "tsx src/add-user.ts"
+    "add-user": "tsx src/add-user.ts",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
