@@ -1,14 +1,14 @@
-import { driver } from './db';
+import { driver, schemaExecutor } from './db';
 import { assertSchema, syncSchema } from './db/schema';
 
 async function main(): Promise<void> {
   const check = process.argv.includes('--check');
   await driver.connect();
   if (check) {
-    await assertSchema(driver);
+    await assertSchema(schemaExecutor);
     console.log('Database schema is up to date');
   } else {
-    await syncSchema(driver);
+    await syncSchema(schemaExecutor);
     console.log('Database synchronized');
   }
 }

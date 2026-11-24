@@ -7,6 +7,7 @@ import {
   Row,
   Scalar,
   SelectSpec,
+  SqlExecutor,
   Store,
   Where,
 } from './types';
@@ -63,6 +64,12 @@ function compileCond(col: string, cond: Cond, params: unknown[]): string {
       }
       if (v.length === 0) {
         return 'FALSE';
+      }
+      if (v.some((item) => item === null)) {
+        throw new DriverError(
+          'invalid_identifier',
+          `Operator in on column ${col} does not accept null; use isNull instead`,
+        );
       }
       const placeholders = v.map((item) => param(item, params));
       return `${col} IN (${placeholders.join(', ')})`;
@@ -168,6 +175,9 @@ class PgStore implements Store {
     if (rows.length === 0) {
       return [];
     }
+    if (Object.keys(rows[0]).length === 0) {
+      throw new DriverError('invalid_identifier', `Cannot insert into ${table} with an empty row`);
+    }
     const params: unknown[] = [];
     const sql = compileInsert(table, rows, params);
     return this.run(sql, params);
@@ -209,24 +219,22 @@ class PgStore implements Store {
   }
 }
 
-export class PgDriver implements Driver {
+export class PgDriver implements Driver, SqlExecutor {
   private pool: Pool | null = null;
+  private connecting: Promise<void> | null = null;
 
   constructor(private readonly url: string) {}
 
-  async connect(): Promise<void> {
+  connect(): Promise<void> {
     if (this.pool) {
-      return;
+      return Promise.resolve();
     }
-    const pool = new Pool({ connectionString: this.url, max: 10 });
-    try {
-      await pool.query('select 1');
-    } catch (error) {
-      await pool.end();
-      this.pool = null;
-      throw error;
+    if (!this.connecting) {
+      this.connecting = this.openPool().finally(() => {
+        this.connecting = null;
+      });
     }
-    this.pool = pool;
+    return this.connecting;
   }
 
   async close(): Promise<void> {
@@ -234,6 +242,30 @@ export class PgDriver implements Driver {
     this.pool = null;
     if (pool) {
       await pool.end();
+    }
+  }
+
+  /**
+   * Runs all statements inside one transaction. Internal to schema tooling;
+   * deliberately not part of the `Driver`/`Store` contracts.
+   */
+  async execAll(statements: readonly string[]): Promise<void> {
+    const client = await this.requirePool().connect();
+    try {
+      await this.runControl(client, 'BEGIN');
+      for (const statement of statements) {
+        await client.query(statement);
+      }
+      await this.runControl(client, 'COMMIT');
+    } catch (error) {
+      try {
+        await this.runControl(client, 'ROLLBACK');
+      } catch {
+        // swallow rollback failures; surface the original error
+      }
+      throw translateError(error);
+    } finally {
+      client.release();
     }
   }
 
@@ -256,17 +288,17 @@ export class PgDriver implements Driver {
   async transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T> {
     const client = await this.requirePool().connect();
     try {
-      await client.query('BEGIN');
+      await this.runControl(client, 'BEGIN');
       const result = await fn(new PgStore(client));
-      await client.query('COMMIT');
+      await this.runControl(client, 'COMMIT');
       return result;
     } catch (error) {
       try {
-        await client.query('ROLLBACK');
+        await this.runControl(client, 'ROLLBACK');
       } catch {
         // swallow rollback failures; surface the original error
       }
-      throw error;
+      throw translateError(error);
     } finally {
       client.release();
     }
@@ -279,6 +311,25 @@ export class PgDriver implements Driver {
   async query<T extends Row = Row>(sql: string, params?: unknown[]): Promise<T[]> {
     const result = await this.requirePool().query(sql, params);
     return result.rows as T[];
+  }
+
+  private async openPool(): Promise<void> {
+    const pool = new Pool({ connectionString: this.url, max: 10 });
+    try {
+      await pool.query('select 1');
+    } catch (error) {
+      await pool.end();
+      throw error;
+    }
+    this.pool = pool;
+  }
+
+  private async runControl(client: Queryable, sql: string): Promise<void> {
+    try {
+      await client.query(sql);
+    } catch (error) {
+      throw translateError(error);
+    }
   }
 
   private requirePool(): Pool {

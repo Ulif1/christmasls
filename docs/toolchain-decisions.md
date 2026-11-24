@@ -94,3 +94,23 @@ Cross-check on the old compiler: `typescript@5.9.3` with config **A** exits **2*
 3. Compose still runs `postgres:15` (server_version 15.20), not the target `postgres:18-alpine`; compose was deliberately left untouched. Both target image tags exist with `linux/amd64`.
 4. Base image tags verified via `docker manifest inspect`: `node:26-alpine` and `postgres:18-alpine` both resolve for amd64.
 5. `target: ES2022` flips `useDefineForClassFields` to `true` (the old config used ES2020, i.e. `false`). Class fields now emit as `status;` own-property defines. Verified harmless for the `Error` subclasses; if a remaining TypeORM entity misbehaves before removal, set `"useDefineForClassFields": false` rather than lowering the target.
+
+## WP2 transitional state — do not deploy
+
+WP2 introduces the raw-`pg` `Store`/`Driver` contract and `db:sync`, but it is not
+yet a deployable state. The following are intentional, time-boxed risks:
+
+- **Entities still use TypeORM's default table names** (`user`, `christmas_list`,
+  `item`, `list_share`) until WP5 rewrites them against the new driver. Until
+  then, the TypeORM app and the new schema do not agree.
+- **The old app must never run against `christmasdb_upgrade`.** Its TypeORM
+  naming and the WP2 schema would diverge and could silently write to the wrong
+  tables.
+- **The dev database is reset rather than migrated.** This is approved; the data
+  is disposable. There is no migration path from the old TypeORM schema.
+- **`db:sync` is wired into the start path in WP8**, not before. Until then it is
+  a manual command (`npm run db:sync`).
+- **`assertSchema` becomes the boot-time guard in WP5** and is the authoritative
+  structural check from then on. `db:sync --check` already uses it, and it
+  verifies columns, primary keys, the `list_shares` UNIQUE constraint, foreign
+  keys with `ON DELETE CASCADE`, and the two indexes.

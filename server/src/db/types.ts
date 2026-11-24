@@ -15,6 +15,15 @@ export interface Driver extends Store {
   close(): Promise<void>;
   transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T>;
 }
+/**
+ * Raw-SQL escape hatch used only by schema tooling. It is deliberately kept
+ * out of `Driver`/`Store` so application code cannot bypass `ident()` and
+ * `$n` parameterisation.
+ */
+export interface SqlExecutor {
+  exec(sql: string): Promise<void>;
+  query<T extends Row = Row>(sql: string, params?: unknown[]): Promise<T[]>;
+}
 export type DriverErrorCode = 'unfiltered_write' | 'invalid_identifier' | 'unique_violation'
   | 'foreign_key_violation' | 'not_null_violation' | 'check_violation' | 'unknown';
 export class DriverError extends Error {
