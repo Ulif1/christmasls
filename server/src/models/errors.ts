@@ -6,9 +6,8 @@ import { AppError, ConflictError, InternalError, ValidationError } from '../erro
  * The single place where infrastructure errors become application errors.
  *
  * `AppError`s are intentional and pass through untouched. `PgDriver.transaction`
- * wraps anything thrown inside its callback in a `DriverError` (preserving the
- * original as `cause`), so an intentional `AppError` raised inside a transaction
- * is unwrapped here rather than being turned into a 500.
+ * rethrows the callback's error unchanged, so an intentional `AppError` raised
+ * inside a transaction is preserved; `PgStore` translates its own `DriverError`s.
  */
 export async function run<T>(fn: () => Promise<T>): Promise<T> {
   try {
@@ -19,9 +18,6 @@ export async function run<T>(fn: () => Promise<T>): Promise<T> {
     }
 
     if (error instanceof DriverError) {
-      if (error.cause instanceof AppError) {
-        throw error.cause;
-      }
       switch (error.code) {
         case 'unique_violation':
           throw new ConflictError('Already exists');

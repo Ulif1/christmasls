@@ -36,29 +36,30 @@ interface ColumnSpec {
   name: string;
   type: string;
   nullable: boolean;
+  default?: 'nextval' | 'false';
 }
 
 const COLUMNS: Record<Table, readonly ColumnSpec[]> = {
   users: [
-    { name: 'id', type: 'int4', nullable: false },
+    { name: 'id', type: 'int4', nullable: false, default: 'nextval' },
     { name: 'username', type: 'text', nullable: false },
     { name: 'password_hash', type: 'text', nullable: false },
   ],
   christmas_lists: [
-    { name: 'id', type: 'int4', nullable: false },
+    { name: 'id', type: 'int4', nullable: false, default: 'nextval' },
     { name: 'name', type: 'text', nullable: false },
     { name: 'user_id', type: 'int4', nullable: false },
   ],
   items: [
-    { name: 'id', type: 'int4', nullable: false },
+    { name: 'id', type: 'int4', nullable: false, default: 'nextval' },
     { name: 'name', type: 'text', nullable: false },
     { name: 'description', type: 'text', nullable: true },
     { name: 'price', type: 'numeric', nullable: true },
-    { name: 'purchased', type: 'bool', nullable: false },
+    { name: 'purchased', type: 'bool', nullable: false, default: 'false' },
     { name: 'list_id', type: 'int4', nullable: false },
   ],
   list_shares: [
-    { name: 'id', type: 'int4', nullable: false },
+    { name: 'id', type: 'int4', nullable: false, default: 'nextval' },
     { name: 'list_id', type: 'int4', nullable: false },
     { name: 'user_id', type: 'int4', nullable: false },
   ],
@@ -72,6 +73,7 @@ const PRIMARY_KEYS: Record<Table, readonly string[]> = {
 };
 
 const UNIQUE_CONSTRAINTS: ReadonlyArray<{ table: Table; columns: readonly string[] }> = [
+  { table: 'users', columns: ['username'] },
   { table: 'list_shares', columns: ['list_id', 'user_id'] },
 ];
 
@@ -87,7 +89,10 @@ const FOREIGN_KEYS: ReadonlyArray<{
   { table: 'list_shares', column: 'user_id', refTable: 'users', refColumn: 'id' },
 ];
 
-const INDEXES = ['idx_items_list_id', 'idx_list_shares_user_id'] as const;
+const INDEXES: ReadonlyArray<{ name: string; table: Table; columns: readonly string[] }> = [
+  { name: 'idx_items_list_id', table: 'items', columns: ['list_id'] },
+  { name: 'idx_list_shares_user_id', table: 'list_shares', columns: ['user_id'] },
+];
 
 interface AtomicSqlExecutor extends SqlExecutor {
   execAll(statements: readonly string[]): Promise<void>;
@@ -101,12 +106,25 @@ function sameColumns(actual: readonly string[], expected: readonly string[]): bo
   return actual.length === expected.length && actual.every((column, i) => column === expected[i]);
 }
 
+function isNextvalDefault(value: string | null): boolean {
+  return value !== null && value.includes('nextval(');
+}
+
+function isFalseDefault(value: string | null): boolean {
+  if (value === null) {
+    return false;
+  }
+  const normalized = value.trim().toLowerCase().replace(/^'(.*)'::boolean$/, '$1');
+  return normalized === 'false';
+}
+
 type TableRow = { table_name: string };
 type ColumnRow = {
   table_name: string;
   column_name: string;
   udt_name: string;
   is_nullable: string;
+  column_default: string | null;
 };
 type PrimaryKeyRow = { table_name: string; column_name: string };
 type UniqueRow = { table_name: string; columns: string[] };
@@ -117,7 +135,12 @@ type ForeignKeyRow = {
   ref_column: string;
   on_delete: string;
 };
-type IndexRow = { indexname: string };
+type IndexRow = {
+  table_name: string;
+  index_name: string;
+  is_valid: boolean;
+  columns: string[];
+};
 
 const DELETE_ACTIONS: Record<string, string> = {
   a: 'NO ACTION',
@@ -146,7 +169,7 @@ export async function assertSchema(db: SqlExecutor): Promise<void> {
         [TABLES],
       ),
       db.query<ColumnRow>(
-        `select table_name, column_name, udt_name, is_nullable
+        `select table_name, column_name, udt_name, is_nullable, column_default
           from information_schema.columns
           where table_schema = 'public' and table_name = any($1::text[])`,
         [TABLES],
@@ -195,9 +218,19 @@ export async function assertSchema(db: SqlExecutor): Promise<void> {
         [TABLES],
       ),
       db.query<IndexRow>(
-        `select indexname from pg_indexes
-          where schemaname = 'public' and indexname = any($1::text[])`,
-        [INDEXES],
+        `select t.relname as table_name,
+                i.relname as index_name,
+                ix.indisvalid as is_valid,
+                array_agg(a.attname::text order by k.ord) as columns
+          from pg_index ix
+          join pg_class i on i.oid = ix.indexrelid
+          join pg_class t on t.oid = ix.indrelid
+          join pg_namespace ns on ns.oid = t.relnamespace
+          join lateral unnest(ix.indkey::int2[]) with ordinality as k(attnum, ord) on true
+          join pg_attribute a on a.attrelid = t.oid and a.attnum = k.attnum
+          where ns.nspname = 'public' and i.relname = any($1::text[])
+          group by t.relname, i.relname, ix.indisvalid`,
+        [INDEXES.map((index) => index.name)],
       ),
     ]);
 
@@ -236,6 +269,19 @@ export async function assertSchema(db: SqlExecutor): Promise<void> {
             expected.nullable ? 'nullable' : 'NOT NULL'
           }`,
         );
+      }
+      if (expected.default === 'nextval' && !isNextvalDefault(actual.column_default)) {
+        defects.push(`column "${key}" is missing a nextval default`);
+      }
+      if (expected.default === 'false' && !isFalseDefault(actual.column_default)) {
+        defects.push(`column "${key}" is missing a false default`);
+      }
+    }
+
+    const expectedColumnNames = new Set(COLUMNS[table].map((column) => column.name));
+    for (const row of columnRows) {
+      if (row.table_name === table && !expectedColumnNames.has(row.column_name)) {
+        defects.push(`unexpected column "${table}.${row.column_name}"`);
       }
     }
 
@@ -290,10 +336,21 @@ export async function assertSchema(db: SqlExecutor): Promise<void> {
     }
   }
 
-  const presentIndexes = new Set(indexRows.map((row) => row.indexname));
+  const indexesByName = new Map(indexRows.map((row) => [row.index_name, row]));
   for (const index of INDEXES) {
-    if (!presentIndexes.has(index)) {
-      defects.push(`missing index "${index}"`);
+    const actual = indexesByName.get(index.name);
+    if (!actual) {
+      defects.push(`missing index "${index.name}"`);
+      continue;
+    }
+    if (actual.table_name !== index.table || !sameColumns(actual.columns, index.columns)) {
+      defects.push(
+        `index "${index.name}" is on "${actual.table_name}"(${actual.columns.join(', ')}), ` +
+          `expected "${index.table}"(${index.columns.join(', ')})`,
+      );
+    }
+    if (!actual.is_valid) {
+      defects.push(`index "${index.name}" is invalid`);
     }
   }
 

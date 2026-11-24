@@ -173,7 +173,10 @@ async function main(): Promise<void> {
             await users.insert({ username: txnName, passwordHash: 'txn-hash' });
             throw new Error('force rollback');
           }),
-        (error: unknown) => error instanceof DriverError,
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message === 'force rollback' &&
+          !(error instanceof DriverError),
       );
       const survivors = await usersTable.findMany({ where: { username: { eq: txnName } } });
       assert.strictEqual(survivors.length, 0);

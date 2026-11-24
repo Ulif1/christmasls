@@ -122,6 +122,11 @@ function compileSelect(table: string, spec: SelectSpec, params: unknown[]): stri
 }
 
 function compileInsert(table: string, rows: Row[], params: unknown[]): string {
+  for (const row of rows) {
+    if (Object.keys(row).length === 0) {
+      throw new DriverError('invalid_identifier', `Cannot insert into ${table} with an empty row`);
+    }
+  }
   const columns = Object.keys(rows[0]);
   for (const row of rows) {
     const keys = Object.keys(row);
@@ -174,9 +179,6 @@ class PgStore implements Store {
   async insertMany(table: string, rows: Row[]): Promise<Row[]> {
     if (rows.length === 0) {
       return [];
-    }
-    if (Object.keys(rows[0]).length === 0) {
-      throw new DriverError('invalid_identifier', `Cannot insert into ${table} with an empty row`);
     }
     const params: unknown[] = [];
     const sql = compileInsert(table, rows, params);
@@ -238,6 +240,15 @@ export class PgDriver implements Driver, SqlExecutor {
   }
 
   async close(): Promise<void> {
+    // A `connect()` may still be opening the pool. Wait for it (ignoring a
+    // failed connect) so its pool cannot be assigned after we tear down.
+    if (this.connecting) {
+      try {
+        await this.connecting;
+      } catch {
+        // the connect failure is reported to its own caller
+      }
+    }
     const pool = this.pool;
     this.pool = null;
     if (pool) {
@@ -298,7 +309,10 @@ export class PgDriver implements Driver, SqlExecutor {
       } catch {
         // swallow rollback failures; surface the original error
       }
-      throw translateError(error);
+      // `fn` errors (including `AppError`s and already-translated
+      // `DriverError`s) must survive unchanged. Control statements above are
+      // already translated by `runControl`.
+      throw error;
     } finally {
       client.release();
     }
