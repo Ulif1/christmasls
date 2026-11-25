@@ -5,7 +5,9 @@
     "dev": "parcel index.html --port 3000",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && parcel build index.html",
-    "preview": "parcel preview dist/index.html"
+    "preview": "parcel preview dist/index.html",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "react": "19.3.1",
@@ -16,11 +18,10 @@
     "packageExports": true
   },
   "devDependencies": {
-    "@parcel/transformer-less": "^2.16.4",
+    "@playwright/test": "^1.65.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "jwt-decode": "^3.1.2",
-    "less": "^4.9.1",
     "parcel": "^2.16.4",
     "typescript": "7.0.2"
   }

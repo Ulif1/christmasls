@@ -1,0 +1,97 @@
+/*
+ * Breakpoints (media queries require literal values, not custom properties):
+ * 640px, 960px, 1200px.
+ * Canonical usage: max-width: 639px, min-width: 960px, min-width: 1200px.
+ */
+
+:root {
+  /* Surfaces */
+  --color-bg: #f7f8f5;
+  --color-surface: #ffffff;
+  /* Elevated surfaces: user menu, toasts. */
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #eef1ec;
+
+  /* Text */
+  --color-text: #17251d;
+  --color-text-muted: #52645a;
+
+  /* Border contract: subtle = decorative dividers/card edges;
+     border = interactive control boundaries (>= 3:1 against surface/bg);
+     strong = emphasis/hover. */
+  --color-border-subtle: #c9d3cc;
+  --color-border: #74867a;
+  --color-border-strong: #60756a;
+
+  /* Overlay */
+  --color-overlay: rgba(12, 24, 17, .52);
+
+  /* Primary evergreen */
+  --color-primary: #1d5c45;
+  --color-primary-hover: #174b38;
+  --color-primary-active: #123b2c;
+  --color-primary-subtle: #e3efe8;
+  --color-on-primary: #ffffff;
+
+  /* Success (toast accent) */
+  --color-success: #1f6b3a;
+
+  /* Danger */
+  --color-danger: #8f1d18;
+  --color-danger-hover: #741712;
+  --color-danger-active: #5c120e;
+  --color-danger-subtle: #f9e6e4;
+  --color-on-danger: #ffffff;
+
+  /* Focus */
+  --color-focus-ring: #0b63c5;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(15, 35, 25, .08);
+  --shadow-md: 0 8px 24px rgba(15, 35, 25, .10);
+  --shadow-lg: 0 20px 48px rgba(15, 35, 25, .16);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+
+  /* Type scale */
+  --text-xs: 12px;
+  --text-xs-lh: 16px;
+  --text-sm: 14px;
+  --text-sm-lh: 20px;
+  --text-base: 16px;
+  --text-base-lh: 24px;
+  --text-md: 20px;
+  --text-md-lh: 28px;
+  --text-lg: 25px;
+  --text-lg-lh: 32px;
+  --text-xl: 32px;
+  --text-xl-lh: 40px;
+
+  /* Fonts */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --ease-standard: cubic-bezier(.2, 0, 0, 1);
+
+  /* Z-index */
+  --z-header: 10;
+  --z-toast: 60;
+}

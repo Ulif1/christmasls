@@ -1,0 +1,31 @@
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text);
+  font-size: var(--text-base);
+  line-height: var(--text-base-lh);
+  cursor: pointer;
+}
+
+.checkboxDisabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.checkboxInput {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.checkboxInput:disabled {
+  cursor: not-allowed;
+}
+
+.checkboxLabel {
+  display: inline;
+}

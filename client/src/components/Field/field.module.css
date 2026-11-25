@@ -1,0 +1,30 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.fieldLabel {
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-lh);
+  font-weight: var(--weight-medium);
+}
+
+.fieldRequired {
+  margin-left: var(--space-1);
+  color: var(--color-danger);
+}
+
+.fieldHint {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs-lh);
+}
+
+.fieldError {
+  color: var(--color-danger);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs-lh);
+}

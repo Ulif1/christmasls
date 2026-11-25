@@ -1,0 +1,70 @@
+.dialog {
+  max-width: none;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text);
+}
+
+.dialogSm {
+  width: min(calc(100% - 2 * var(--space-4)), 400px);
+  max-width: 400px;
+}
+
+.dialogMd {
+  width: min(calc(100% - 2 * var(--space-4)), 520px);
+  max-width: 520px;
+}
+
+.dialog::backdrop {
+  background: var(--color-overlay);
+  backdrop-filter: blur(2px);
+}
+
+.dialog[open] {
+  animation: dialogIn var(--dur-base) var(--ease-standard);
+}
+
+@keyframes dialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.header {
+  padding: var(--space-5);
+}
+
+.title {
+  font-size: var(--text-md);
+  line-height: var(--text-md-lh);
+  font-weight: var(--weight-semibold);
+}
+
+.body {
+  padding: var(--space-5);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog[open] {
+    animation: none;
+  }
+}

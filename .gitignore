@@ -1,10 +1,16 @@
 # Dependencies
 node_modules/
-.parcel-cache/
+client/.parcel-cache/
 
 # Build outputs
 dist/
 build/
+
+# Playwright
+client/test-results/
+client/playwright-report/
+client/blob-report/
+client/.playwright/
 
 # Logs
 *.log

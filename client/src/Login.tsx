@@ -1,59 +1,119 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import './styles/login.less';
+import { Button, Card, Field, Input } from './components';
+import styles from './pages/login.module.css';
 
-const Login: React.FC<{}> = () => {
+interface LoginResponse {
+  token: string;
+  message?: string;
+}
+
+const Login: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const submittingRef = useRef(false);
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUsernameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setUsername(event.target.value);
+    setError(null);
+  };
+
+  const handlePasswordChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(event.target.value);
+    setError(null);
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
+    setPending(true);
+    setError(null);
+
     try {
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
-      const data = await response.json();
+      const data = (await response.json()) as LoginResponse;
       if (response.ok) {
-        setMessage('Login successful');
         sessionStorage.setItem('token', data.token);
         navigate('/home');
       } else {
-        setMessage(data.message || 'Login failed');
+        setError(data.message || 'Login failed');
       }
-    } catch (error) {
-      setMessage('Login failed');
+    } catch {
+      setError('Login failed');
+    } finally {
+      submittingRef.current = false;
+      setPending(false);
     }
   };
 
   return (
-    <div className="login">
-      <h2 className="login__title">🎄 Merry Christmas Login 🎄</h2>
-      <form className="login__form" onSubmit={handleSubmit}>
-        <div>
-          <label>Username:</label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
+    <div className={styles.page}>
+      <div className={styles.panel}>
+        <div className={styles.brand}>
+          <span className={styles.brandMark} aria-hidden="true">
+            🎄
+          </span>
+          <h1 className={styles.brandName}>ChristmasLS</h1>
         </div>
-        <div>
-          <label>Password:</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </div>
-        <button type="submit" className="login__button">Login</button>
-      </form>
-      {message && <p className={`login__message ${message.includes('successful') ? 'login__message--success' : 'login__message--error'}`}>{message}</p>}
+        <Card header={<h2 className={styles.title}>Log in</h2>}>
+          <form
+            className={styles.form}
+            onSubmit={handleSubmit}
+            aria-describedby={error ? 'login-error' : undefined}
+          >
+            {error ? (
+              <p id="login-error" className={styles.error} role="alert">
+                {error}
+              </p>
+            ) : null}
+            <div className={styles.fields}>
+              <Field label="Username" htmlFor="login-username">
+                <Input
+                  id="login-username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  value={username}
+                  onChange={handleUsernameChange}
+                  required
+                  autoFocus
+                />
+              </Field>
+              <Field label="Password" htmlFor="login-password">
+                <Input
+                  id="login-password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={handlePasswordChange}
+                  required
+                />
+              </Field>
+            </div>
+            <Button
+              type="submit"
+              variant="primary"
+              block
+              loading={pending}
+              disabled={pending}
+              className={styles.submit}
+            >
+              Log in
+            </Button>
+          </form>
+        </Card>
+      </div>
     </div>
   );
 };

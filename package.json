@@ -11,8 +11,5 @@
     "build-server": "cd server && npm run build",
     "build-client": "cd client && npm run build",
     "preview-client": "cd client && npm run preview"
-  },
-  "devDependencies": {
-    "@parcel/transformer-less": "^2.16.4"
   }
 }

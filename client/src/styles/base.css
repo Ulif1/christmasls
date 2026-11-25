@@ -1,0 +1,62 @@
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--text-base-lh);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: var(--weight-semibold);
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: var(--text-xl);
+  line-height: var(--text-xl-lh);
+}
+
+h2 {
+  font-size: var(--text-lg);
+  line-height: var(--text-lg-lh);
+}
+
+h3 {
+  font-size: var(--text-md);
+  line-height: var(--text-md-lh);
+}
+
+h4,
+h5,
+h6 {
+  font-size: var(--text-base);
+  line-height: var(--text-base-lh);
+}
+
+a {
+  color: var(--color-primary);
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+::selection {
+  background: var(--color-primary-subtle);
+}

@@ -1,0 +1,43 @@
+.card {
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text);
+}
+
+.cardHeader {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  font-size: var(--text-base);
+  line-height: var(--text-base-lh);
+  font-weight: var(--weight-semibold);
+}
+
+.cardBody {
+  min-width: 0;
+}
+
+.cardFooter {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+}
+
+.cardPadNone {
+  padding: 0;
+}
+
+.cardPadSm {
+  padding: var(--space-4);
+}
+
+.cardPadMd {
+  padding: var(--space-5);
+}
+
+.cardPadLg {
+  padding: var(--space-6);
+}
