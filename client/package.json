@@ -3,22 +3,25 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "parcel index.html --port 3000",
-    "build": "parcel build index.html",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && parcel build index.html",
     "preview": "parcel preview dist/index.html"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.14.0"
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router": "8.5.2"
+  },
+  "@parcel/resolver-default": {
+    "packageExports": true
   },
   "devDependencies": {
-    "@parcel/transformer-less": "^2.12.0",
-    "@parcel/transformer-typescript-tsc": "^2.16.3",
-    "@types/react": "^18.3.27",
-    "@types/react-dom": "^18.2.18",
+    "@parcel/transformer-less": "^2.16.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "jwt-decode": "^3.1.2",
-    "less": "^4.2.0",
-    "parcel": "^2.11.0",
-    "typescript": "^5.3.3"
+    "less": "^4.9.1",
+    "parcel": "^2.16.4",
+    "typescript": "7.0.2"
   }
 }

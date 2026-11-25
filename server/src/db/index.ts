@@ -1,0 +1,8 @@
+import { loadConfig } from '../config';
+import { PgDriver } from './postgres';
+import type { Driver } from './types';
+
+const pg = new PgDriver(loadConfig().databaseUrl);
+
+/** App-facing singleton. Raw `exec`/`query` are intentionally not exposed. */
+export const driver: Driver = pg;

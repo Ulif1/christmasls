@@ -1,12 +1,9 @@
-FROM node:18-alpine
+FROM node:26-alpine
 
 WORKDIR /app
 
-ENV npm_config_target_platform=linux
-ENV npm_config_target_arch=arm64
-
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 COPY . .
 

@@ -1,42 +1,56 @@
-import 'reflect-metadata';
-
-import { DataSource } from 'typeorm';
-import { User } from './entities/User';
-import { ChristmasList } from './entities/ChristmasList';
-import { Item } from './entities/Item';
 import bcrypt from 'bcryptjs';
 
-const AppDataSource = new DataSource({
-  type: 'postgres',
-  url: process.env.DATABASE_URL,
-  entities: [User, ChristmasList, Item],
-  synchronize: true,
-});
+import { loadConfig } from './config';
+import { driver } from './db';
+import { syncSchema } from './db/schema';
+import { createSchemaDriver } from './db/tooling';
+import { isAppError } from './errors';
+import { createModels } from './models';
 
-async function addUser() {
+async function sync(databaseUrl: string): Promise<void> {
+  const schema = createSchemaDriver(databaseUrl);
+  try {
+    await schema.connect();
+    await syncSchema(schema);
+  } finally {
+    await schema.close();
+  }
+}
+
+async function main(): Promise<void> {
   const username = process.argv[2];
   const password = process.argv[3];
 
   if (!username || !password) {
     console.error('Usage: npm run add-user <username> <password>');
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
-  await AppDataSource.initialize();
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const config = loadConfig();
+  await driver.connect();
   try {
-    const existingUser = await AppDataSource.manager.findOne(User, { where: { username } });
-    if (!existingUser) {
-      const user = await AppDataSource.manager.save(User, { username, password: hashedPassword });
+    // Idempotent first-run convenience: make sure the tables exist.
+    await sync(config.databaseUrl);
+
+    const models = createModels(driver);
+    try {
+      const user = await models.users.create(username, await bcrypt.hash(password, 10));
       console.log('User created:', user.username);
-    } else {
-      console.log('User already exists');
+    } catch (error) {
+      if (isAppError(error) && error.status === 409) {
+        console.error('User already exists');
+        process.exitCode = 1;
+        return;
+      }
+      throw error;
     }
-  } catch (error) {
-    console.error('Error adding user:', error);
   } finally {
-    await AppDataSource.destroy();
+    await driver.close();
   }
 }
 
-addUser();
+main().catch((error: unknown) => {
+  console.error('Error adding user:', error);
+  process.exit(1);
+});
